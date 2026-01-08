@@ -1,0 +1,22 @@
+{
+  "name": "gerry421/claude-post-processor",
+  "description": "WordPress plugin that processes posts using the Anthropic Claude API",
+  "type": "wordpress-plugin",
+  "license": "GPL-2.0-or-later",
+  "authors": [
+    {
+      "name": "Gerry421"
+    }
+  ],
+  "require": {
+    "php": ">=8.0"
+  },
+  "autoload": {
+    "classmap": [
+      "includes/"
+    ]
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^9.0"
+  }
+}
