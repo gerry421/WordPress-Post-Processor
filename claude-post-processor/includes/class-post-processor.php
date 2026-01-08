@@ -63,6 +63,7 @@ class Post_Processor {
 		// Add row action
 		add_filter( 'post_row_actions', array( $this, 'add_row_action' ), 10, 2 );
 		add_action( 'admin_action_claude_process_post', array( $this, 'handle_row_action' ) );
+		add_action( 'admin_action_claude_reprocess_post', array( $this, 'handle_reprocess_row_action' ) );
 
 		// Add custom column
 		add_filter( 'manage_posts_columns', array( $this, 'add_custom_column' ) );
@@ -445,6 +446,7 @@ class Post_Processor {
 	 */
 	public function add_bulk_action( $actions ) {
 		$actions['claude_process'] = __( 'Process with Claude', 'claude-post-processor' );
+		$actions['claude_reprocess'] = __( 'Reprocess with Claude', 'claude-post-processor' );
 		return $actions;
 	}
 
@@ -457,7 +459,7 @@ class Post_Processor {
 	 * @return string Modified redirect URL.
 	 */
 	public function handle_bulk_action( $redirect_to, $action, $post_ids ) {
-		if ( 'claude_process' !== $action ) {
+		if ( 'claude_process' !== $action && 'claude_reprocess' !== $action ) {
 			return $redirect_to;
 		}
 
@@ -468,6 +470,11 @@ class Post_Processor {
 
 		$processed = 0;
 		foreach ( $post_ids as $post_id ) {
+			// Clear metadata if reprocessing
+			if ( 'claude_reprocess' === $action ) {
+				$this->clear_processing_meta( $post_id );
+			}
+
 			$result = $this->process_post( $post_id );
 			if ( ! is_wp_error( $result ) ) {
 				$processed++;
@@ -476,7 +483,11 @@ class Post_Processor {
 			sleep( 2 );
 		}
 
-		$redirect_to = add_query_arg( 'claude_processed', $processed, $redirect_to );
+		if ( 'claude_reprocess' === $action ) {
+			$redirect_to = add_query_arg( 'reprocessed', $processed, $redirect_to );
+		} else {
+			$redirect_to = add_query_arg( 'claude_processed', $processed, $redirect_to );
+		}
 		return $redirect_to;
 	}
 
@@ -489,11 +500,23 @@ class Post_Processor {
 	 */
 	public function add_row_action( $actions, $post ) {
 		if ( 'post' === $post->post_type && current_user_can( 'edit_post', $post->ID ) ) {
-			$url = wp_nonce_url(
-				admin_url( 'admin.php?action=claude_process_post&post=' . $post->ID ),
-				'claude_process_post_' . $post->ID
-			);
-			$actions['claude_process'] = '<a href="' . esc_url( $url ) . '">' . __( 'Process with Claude', 'claude-post-processor' ) . '</a>';
+			$is_processed = get_post_meta( $post->ID, '_claude_processed', true );
+			
+			if ( $is_processed ) {
+				// Show "Reprocess" for already processed posts
+				$url = wp_nonce_url(
+					admin_url( 'admin.php?action=claude_reprocess_post&post=' . $post->ID ),
+					'claude_reprocess_post_' . $post->ID
+				);
+				$actions['claude_reprocess'] = '<a href="' . esc_url( $url ) . '">' . __( 'Reprocess with Claude', 'claude-post-processor' ) . '</a>';
+			} else {
+				// Show "Process" for unprocessed posts
+				$url = wp_nonce_url(
+					admin_url( 'admin.php?action=claude_process_post&post=' . $post->ID ),
+					'claude_process_post_' . $post->ID
+				);
+				$actions['claude_process'] = '<a href="' . esc_url( $url ) . '">' . __( 'Process with Claude', 'claude-post-processor' ) . '</a>';
+			}
 		}
 		return $actions;
 	}
@@ -527,6 +550,41 @@ class Post_Processor {
 
 		// Redirect back to post list
 		wp_safe_redirect( admin_url( 'edit.php?claude_processed=1' ) );
+		exit;
+	}
+
+	/**
+	 * Handle reprocess row action.
+	 */
+	public function handle_reprocess_row_action() {
+		if ( ! isset( $_GET['post'] ) ) {
+			wp_die( esc_html__( 'No post specified.', 'claude-post-processor' ) );
+		}
+
+		$post_id = absint( $_GET['post'] );
+
+		// Verify nonce
+		if ( ! isset( $_GET['_wpnonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ) ), 'claude_reprocess_post_' . $post_id ) ) {
+			wp_die( esc_html__( 'Security check failed.', 'claude-post-processor' ) );
+		}
+
+		// Check permissions
+		if ( ! current_user_can( 'edit_post', $post_id ) ) {
+			wp_die( esc_html__( 'You do not have permission to reprocess this post.', 'claude-post-processor' ) );
+		}
+
+		// Clear processing metadata
+		$this->clear_processing_meta( $post_id );
+
+		// Process the post
+		$result = $this->process_post( $post_id );
+
+		if ( is_wp_error( $result ) ) {
+			wp_die( esc_html( $result->get_error_message() ) );
+		}
+
+		// Redirect back to post list
+		wp_safe_redirect( admin_url( 'edit.php?reprocessed=1' ) );
 		exit;
 	}
 
@@ -589,5 +647,36 @@ class Post_Processor {
 		);
 
 		return get_posts( $args );
+	}
+
+	/**
+	 * Get processed posts.
+	 *
+	 * @return array Array of post objects.
+	 */
+	public function get_processed_posts() {
+		$args = array(
+			'post_type'      => 'post',
+			'posts_per_page' => -1,
+			'meta_query'     => array(
+				array(
+					'key'     => '_claude_processed',
+					'value'   => '1',
+					'compare' => '=',
+				),
+			),
+		);
+		return get_posts( $args );
+	}
+
+	/**
+	 * Clear processing metadata to allow reprocessing.
+	 *
+	 * @param int $post_id The post ID.
+	 */
+	public function clear_processing_meta( $post_id ) {
+		delete_post_meta( $post_id, '_claude_processed' );
+		delete_post_meta( $post_id, '_claude_processed_date' );
+		// Keep _claude_original_content and _claude_processing_log for audit trail
 	}
 }
