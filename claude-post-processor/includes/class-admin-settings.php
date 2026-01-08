@@ -541,11 +541,6 @@ class Admin_Settings {
 		</select>
 		<?php
 	}
-		<p class="description">
-			<?php esc_html_e( 'Select the Claude model to use for processing.', 'claude-post-processor' ); ?>
-		</p>
-		<?php
-	}
 
 	/**
 	 * Render options section description.
