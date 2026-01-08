@@ -20,7 +20,7 @@ class Post_Processor {
 	/**
 	 * Claude API handler.
 	 *
-	 * @var Claude_API
+	 * @var AI_Provider
 	 */
 	private $api;
 
@@ -41,7 +41,7 @@ class Post_Processor {
 	/**
 	 * Constructor.
 	 *
-	 * @param Claude_API       $api Claude API handler.
+	 * @param AI_Provider      $api AI provider handler.
 	 * @param Media_Handler    $media Media handler.
 	 * @param Taxonomy_Manager $taxonomy Taxonomy manager.
 	 */

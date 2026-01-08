@@ -36,7 +36,11 @@ if ( file_exists( CLAUDE_POST_PROCESSOR_PLUGIN_DIR . 'vendor/autoload.php' ) ) {
 /**
  * Require the core classes.
  */
+require_once CLAUDE_POST_PROCESSOR_PLUGIN_DIR . 'includes/interface-ai-provider.php';
 require_once CLAUDE_POST_PROCESSOR_PLUGIN_DIR . 'includes/class-claude-api.php';
+require_once CLAUDE_POST_PROCESSOR_PLUGIN_DIR . 'includes/class-openai-provider.php';
+require_once CLAUDE_POST_PROCESSOR_PLUGIN_DIR . 'includes/class-google-ai-provider.php';
+require_once CLAUDE_POST_PROCESSOR_PLUGIN_DIR . 'includes/class-ai-provider-factory.php';
 require_once CLAUDE_POST_PROCESSOR_PLUGIN_DIR . 'includes/class-post-processor.php';
 require_once CLAUDE_POST_PROCESSOR_PLUGIN_DIR . 'includes/class-media-handler.php';
 require_once CLAUDE_POST_PROCESSOR_PLUGIN_DIR . 'includes/class-taxonomy-manager.php';
@@ -57,7 +61,7 @@ class Claude_Post_Processor {
 	/**
 	 * Claude API handler.
 	 *
-	 * @var Claude_API
+	 * @var AI_Provider
 	 */
 	public $api;
 
@@ -124,7 +128,14 @@ class Claude_Post_Processor {
 	 * Initialize plugin components.
 	 */
 	private function init_components() {
-		$this->api       = new Claude_API();
+		$provider = AI_Provider_Factory::get_current_provider();
+		
+		// If provider creation failed, fall back to Claude
+		if ( is_wp_error( $provider ) ) {
+			$provider = new Claude_API();
+		}
+		
+		$this->api       = $provider;
 		$this->media     = new Media_Handler();
 		$this->taxonomy  = new Taxonomy_Manager();
 		$this->processor = new Post_Processor( $this->api, $this->media, $this->taxonomy );

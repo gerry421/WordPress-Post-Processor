@@ -59,12 +59,35 @@ class Admin_Settings {
 		// API Configuration
 		register_setting(
 			'claude_post_processor_api',
+			'claude_post_processor_ai_provider',
+			array(
+				'sanitize_callback' => 'sanitize_text_field',
+			)
+		);
+		register_setting(
+			'claude_post_processor_api',
 			'claude_post_processor_api_key',
 			array(
 				'sanitize_callback' => array( $this, 'sanitize_api_key' ),
 			)
 		);
+		register_setting(
+			'claude_post_processor_api',
+			'claude_post_processor_openai_api_key',
+			array(
+				'sanitize_callback' => array( $this, 'sanitize_api_key' ),
+			)
+		);
+		register_setting(
+			'claude_post_processor_api',
+			'claude_post_processor_google_api_key',
+			array(
+				'sanitize_callback' => array( $this, 'sanitize_api_key' ),
+			)
+		);
 		register_setting( 'claude_post_processor_api', 'claude_post_processor_model' );
+		register_setting( 'claude_post_processor_api', 'claude_post_processor_openai_model' );
+		register_setting( 'claude_post_processor_api', 'claude_post_processor_google_model' );
 
 		// Processing Options
 		register_setting( 'claude_post_processor_options', 'claude_post_processor_auto_process' );
@@ -73,9 +96,17 @@ class Admin_Settings {
 		// API Configuration Section
 		add_settings_section(
 			'claude_api_section',
-			__( 'API Configuration', 'claude-post-processor' ),
+			__( 'AI Provider Configuration', 'claude-post-processor' ),
 			array( $this, 'render_api_section' ),
 			'claude_post_processor_api'
+		);
+
+		add_settings_field(
+			'ai_provider',
+			__( 'AI Provider', 'claude-post-processor' ),
+			array( $this, 'render_provider_field' ),
+			'claude_post_processor_api',
+			'claude_api_section'
 		);
 
 		add_settings_field(
@@ -90,6 +121,38 @@ class Admin_Settings {
 			'claude_model',
 			__( 'Claude Model', 'claude-post-processor' ),
 			array( $this, 'render_model_field' ),
+			'claude_post_processor_api',
+			'claude_api_section'
+		);
+
+		add_settings_field(
+			'openai_api_key',
+			__( 'OpenAI API Key', 'claude-post-processor' ),
+			array( $this, 'render_openai_api_key_field' ),
+			'claude_post_processor_api',
+			'claude_api_section'
+		);
+
+		add_settings_field(
+			'openai_model',
+			__( 'OpenAI Model', 'claude-post-processor' ),
+			array( $this, 'render_openai_model_field' ),
+			'claude_post_processor_api',
+			'claude_api_section'
+		);
+
+		add_settings_field(
+			'google_api_key',
+			__( 'Google AI API Key', 'claude-post-processor' ),
+			array( $this, 'render_google_api_key_field' ),
+			'claude_post_processor_api',
+			'claude_api_section'
+		);
+
+		add_settings_field(
+			'google_model',
+			__( 'Google AI Model', 'claude-post-processor' ),
+			array( $this, 'render_google_model_field' ),
 			'claude_post_processor_api',
 			'claude_api_section'
 		);
@@ -300,7 +363,48 @@ class Admin_Settings {
 	 * Render API section description.
 	 */
 	public function render_api_section() {
-		echo '<p>' . esc_html__( 'Configure your Anthropic Claude API credentials.', 'claude-post-processor' ) . '</p>';
+		echo '<p>' . esc_html__( 'Configure your AI provider and API credentials. Select which AI service you want to use and enter the corresponding API key.', 'claude-post-processor' ) . '</p>';
+	}
+
+	/**
+	 * Render AI provider field.
+	 */
+	public function render_provider_field() {
+		$selected_provider = AI_Provider_Factory::get_selected_provider();
+		$providers = AI_Provider_Factory::get_available_providers();
+		?>
+		<select name="claude_post_processor_ai_provider" id="claude_post_processor_ai_provider">
+			<?php foreach ( $providers as $value => $label ) : ?>
+				<option value="<?php echo esc_attr( $value ); ?>" <?php selected( $selected_provider, $value ); ?>>
+					<?php echo esc_html( $label ); ?>
+				</option>
+			<?php endforeach; ?>
+		</select>
+		<p class="description">
+			<?php esc_html_e( 'Select which AI service to use for processing posts. Make sure to configure the API key for your selected provider below.', 'claude-post-processor' ); ?>
+		</p>
+		<script>
+		jQuery(document).ready(function($) {
+			function toggleProviderFields() {
+				var provider = $('#claude_post_processor_ai_provider').val();
+				$('[id^="claude_api_key"], [id^="claude_model"]').closest('tr').hide();
+				$('[id^="openai_api_key"], [id^="openai_model"]').closest('tr').hide();
+				$('[id^="google_api_key"], [id^="google_model"]').closest('tr').hide();
+				
+				if (provider === 'claude') {
+					$('[id^="claude_api_key"], [id^="claude_model"]').closest('tr').show();
+				} else if (provider === 'openai') {
+					$('[id^="openai_api_key"], [id^="openai_model"]').closest('tr').show();
+				} else if (provider === 'google_ai') {
+					$('[id^="google_api_key"], [id^="google_model"]').closest('tr').show();
+				}
+			}
+			
+			$('#claude_post_processor_ai_provider').on('change', toggleProviderFields);
+			toggleProviderFields();
+		});
+		</script>
+		<?php
 	}
 
 	/**
@@ -334,12 +438,9 @@ class Admin_Settings {
 	 * Render model field.
 	 */
 	public function render_model_field() {
-		$model = get_option( 'claude_post_processor_model', 'claude-sonnet-4-20250514' );
-		$models = array(
-			'claude-sonnet-4-20250514' => 'Claude Sonnet 4 (Recommended)',
-			'claude-3-5-sonnet-20241022' => 'Claude 3.5 Sonnet',
-			'claude-3-opus-20240229' => 'Claude 3 Opus',
-		);
+		$api = new Claude_API();
+		$model = $api->get_model();
+		$models = $api->get_available_models();
 		?>
 		<select name="claude_post_processor_model" id="claude_post_processor_model">
 			<?php foreach ( $models as $value => $label ) : ?>
@@ -348,9 +449,96 @@ class Admin_Settings {
 				</option>
 			<?php endforeach; ?>
 		</select>
+		<?php
+	}
+
+	/**
+	 * Render OpenAI API key field.
+	 */
+	public function render_openai_api_key_field() {
+		$api = new OpenAI_Provider();
+		$has_key = (bool) $api->get_api_key();
+		?>
+		<input type="password" 
+			   name="claude_post_processor_openai_api_key" 
+			   id="openai_api_key" 
+			   class="regular-text"
+			   value="<?php echo $has_key ? '****************************************' : ''; ?>"
+			   placeholder="<?php esc_attr_e( 'Enter your OpenAI API key', 'claude-post-processor' ); ?>">
 		<p class="description">
-			<?php esc_html_e( 'Select the Claude model to use for processing.', 'claude-post-processor' ); ?>
+			<?php
+			echo wp_kses_post(
+				sprintf(
+					/* translators: %s: URL to OpenAI Platform */
+					__( 'Get your API key from the <a href="%s" target="_blank">OpenAI Platform</a>.', 'claude-post-processor' ),
+					'https://platform.openai.com/api-keys'
+				)
+			);
+			?>
 		</p>
+		<?php
+	}
+
+	/**
+	 * Render OpenAI model field.
+	 */
+	public function render_openai_model_field() {
+		$api = new OpenAI_Provider();
+		$model = $api->get_model();
+		$models = $api->get_available_models();
+		?>
+		<select name="claude_post_processor_openai_model" id="openai_model">
+			<?php foreach ( $models as $value => $label ) : ?>
+				<option value="<?php echo esc_attr( $value ); ?>" <?php selected( $model, $value ); ?>>
+					<?php echo esc_html( $label ); ?>
+				</option>
+			<?php endforeach; ?>
+		</select>
+		<?php
+	}
+
+	/**
+	 * Render Google AI API key field.
+	 */
+	public function render_google_api_key_field() {
+		$api = new Google_AI_Provider();
+		$has_key = (bool) $api->get_api_key();
+		?>
+		<input type="password" 
+			   name="claude_post_processor_google_api_key" 
+			   id="google_api_key" 
+			   class="regular-text"
+			   value="<?php echo $has_key ? '****************************************' : ''; ?>"
+			   placeholder="<?php esc_attr_e( 'Enter your Google AI API key', 'claude-post-processor' ); ?>">
+		<p class="description">
+			<?php
+			echo wp_kses_post(
+				sprintf(
+					/* translators: %s: URL to Google AI Studio */
+					__( 'Get your API key from <a href="%s" target="_blank">Google AI Studio</a>.', 'claude-post-processor' ),
+					'https://aistudio.google.com/app/apikey'
+				)
+			);
+			?>
+		</p>
+		<?php
+	}
+
+	/**
+	 * Render Google AI model field.
+	 */
+	public function render_google_model_field() {
+		$api = new Google_AI_Provider();
+		$model = $api->get_model();
+		$models = $api->get_available_models();
+		?>
+		<select name="claude_post_processor_google_model" id="google_model">
+			<?php foreach ( $models as $value => $label ) : ?>
+				<option value="<?php echo esc_attr( $value ); ?>" <?php selected( $model, $value ); ?>>
+					<?php echo esc_html( $label ); ?>
+				</option>
+			<?php endforeach; ?>
+		</select>
 		<?php
 	}
 
@@ -568,7 +756,7 @@ class Admin_Settings {
 		$key = wp_salt( 'auth' );
 		
 		// Use openssl for encryption if available
-		if ( function_exists( 'openssl_encrypt' ) ) {
+		if ( function_exists( 'openssl_encrypt' ) && function_exists( 'random_bytes' ) ) {
 			$iv = random_bytes( 16 );
 			$encrypted = openssl_encrypt( $api_key, 'AES-256-CBC', $key, 0, $iv );
 			return base64_encode( $encrypted . '::' . $iv );
