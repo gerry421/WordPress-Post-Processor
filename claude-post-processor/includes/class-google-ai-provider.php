@@ -1,8 +1,8 @@
 <?php
 /**
- * Claude API Handler
+ * Google AI Provider
  *
- * Handles all communication with the Anthropic Claude API.
+ * Handles all communication with the Google AI (Gemini) API.
  *
  * @package Claude_Post_Processor
  */
@@ -13,19 +13,14 @@ if ( ! defined( 'WPINC' ) ) {
 }
 
 /**
- * Claude_API class.
+ * Google_AI_Provider class.
  */
-class Claude_API implements AI_Provider {
+class Google_AI_Provider implements AI_Provider {
 
 	/**
-	 * API endpoint.
+	 * API endpoint base.
 	 */
-	const API_ENDPOINT = 'https://api.anthropic.com/v1/messages';
-
-	/**
-	 * API version.
-	 */
-	const API_VERSION = '2023-06-01';
+	const API_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models/';
 
 	/**
 	 * Maximum retry attempts.
@@ -43,22 +38,21 @@ class Claude_API implements AI_Provider {
 	 * @return string Provider name.
 	 */
 	public function get_provider_name() {
-		return 'Anthropic Claude';
+		return 'Google AI (Gemini)';
 	}
 
 	/**
-	 * Get the encrypted API key.
+	 * Get the API key.
 	 *
 	 * @return string|false The decrypted API key or false if not set.
 	 */
 	public function get_api_key() {
-		$encrypted_key = get_option( 'claude_post_processor_api_key', '' );
+		$encrypted_key = get_option( 'claude_post_processor_google_api_key', '' );
 		
 		if ( empty( $encrypted_key ) ) {
 			return false;
 		}
 
-		// Decrypt the API key
 		return $this->decrypt_api_key( $encrypted_key );
 	}
 
@@ -70,11 +64,11 @@ class Claude_API implements AI_Provider {
 	 */
 	public function set_api_key( $api_key ) {
 		if ( empty( $api_key ) ) {
-			return delete_option( 'claude_post_processor_api_key' );
+			return delete_option( 'claude_post_processor_google_api_key' );
 		}
 
 		$encrypted_key = $this->encrypt_api_key( $api_key );
-		return update_option( 'claude_post_processor_api_key', $encrypted_key );
+		return update_option( 'claude_post_processor_google_api_key', $encrypted_key );
 	}
 
 	/**
@@ -84,17 +78,14 @@ class Claude_API implements AI_Provider {
 	 * @return string The encrypted API key.
 	 */
 	private function encrypt_api_key( $api_key ) {
-		// Use WordPress salt as encryption key
 		$key = wp_salt( 'auth' );
 		
-		// Use openssl for encryption if available
 		if ( function_exists( 'openssl_encrypt' ) ) {
 			$iv = random_bytes( 16 );
 			$encrypted = openssl_encrypt( $api_key, 'AES-256-CBC', $key, 0, $iv );
 			return base64_encode( $encrypted . '::' . $iv );
 		}
 		
-		// Fallback to base64 encoding (not secure, but better than plaintext)
 		return base64_encode( $api_key );
 	}
 
@@ -105,22 +96,19 @@ class Claude_API implements AI_Provider {
 	 * @return string The decrypted API key.
 	 */
 	private function decrypt_api_key( $encrypted_key ) {
-		// Use WordPress salt as encryption key
 		$key = wp_salt( 'auth' );
 		
-		// Use openssl for decryption if available
 		if ( function_exists( 'openssl_decrypt' ) && strpos( base64_decode( $encrypted_key ), '::' ) !== false ) {
 			$decoded = base64_decode( $encrypted_key );
 			list( $encrypted_data, $iv ) = explode( '::', $decoded, 2 );
 			return openssl_decrypt( $encrypted_data, 'AES-256-CBC', $key, 0, $iv );
 		}
 		
-		// Fallback to base64 decoding
 		return base64_decode( $encrypted_key );
 	}
 
 	/**
-	 * Send a message to Claude API.
+	 * Send a message to Google AI API.
 	 *
 	 * @param string $prompt The prompt to send.
 	 * @param int    $max_tokens Maximum tokens in response (default 4096).
@@ -130,41 +118,42 @@ class Claude_API implements AI_Provider {
 		$api_key = $this->get_api_key();
 		
 		if ( ! $api_key ) {
-			$this->log_error( 'API key not configured' );
-			return new WP_Error( 'no_api_key', __( 'Claude API key is not configured.', 'claude-post-processor' ) );
+			$this->log_error( 'Google AI API key not configured' );
+			return new WP_Error( 'no_api_key', __( 'Google AI API key is not configured.', 'claude-post-processor' ) );
 		}
 
-		$model = get_option( 'claude_post_processor_model', 'claude-sonnet-4-20250514' );
+		$model = $this->get_model();
+		$endpoint = self::API_ENDPOINT . $model . ':generateContent?key=' . $api_key;
 
 		$body = array(
-			'model'      => $model,
-			'max_tokens' => $max_tokens,
-			'messages'   => array(
+			'contents' => array(
 				array(
-					'role'    => 'user',
-					'content' => $prompt,
+					'parts' => array(
+						array(
+							'text' => $prompt,
+						),
+					),
 				),
+			),
+			'generationConfig' => array(
+				'maxOutputTokens' => $max_tokens,
 			),
 		);
 
 		$args = array(
 			'headers' => array(
-				'x-api-key'         => $api_key,
-				'anthropic-version' => self::API_VERSION,
-				'content-type'      => 'application/json',
+				'Content-Type' => 'application/json',
 			),
 			'body'    => wp_json_encode( $body ),
 			'timeout' => 60,
 		);
 
-		// Attempt the request with exponential backoff
 		$attempt = 0;
 		$response = null;
 
 		while ( $attempt < self::MAX_RETRIES ) {
-			$response = wp_remote_post( self::API_ENDPOINT, $args );
+			$response = wp_remote_post( $endpoint, $args );
 
-			// Check for errors
 			if ( is_wp_error( $response ) ) {
 				$this->log_error( 'API request failed: ' . $response->get_error_message() );
 				$attempt++;
@@ -177,7 +166,6 @@ class Claude_API implements AI_Provider {
 
 			$status_code = wp_remote_retrieve_response_code( $response );
 
-			// Handle rate limiting (429) with exponential backoff
 			if ( 429 === $status_code ) {
 				$attempt++;
 				if ( $attempt < self::MAX_RETRIES ) {
@@ -189,7 +177,6 @@ class Claude_API implements AI_Provider {
 				return new WP_Error( 'rate_limited', __( 'API rate limit exceeded.', 'claude-post-processor' ) );
 			}
 
-			// Handle other non-200 responses
 			if ( $status_code < 200 || $status_code >= 300 ) {
 				$body_content = wp_remote_retrieve_body( $response );
 				$this->log_error( "API request failed with status {$status_code}: {$body_content}" );
@@ -203,11 +190,9 @@ class Claude_API implements AI_Provider {
 				);
 			}
 
-			// Success - break out of retry loop
 			break;
 		}
 
-		// Parse the response
 		$body_content = wp_remote_retrieve_body( $response );
 		$data = json_decode( $body_content, true );
 
@@ -216,14 +201,13 @@ class Claude_API implements AI_Provider {
 			return new WP_Error( 'parse_error', __( 'Failed to parse API response.', 'claude-post-processor' ) );
 		}
 
-		// Log successful API call
 		$this->log_api_call( $prompt, $data );
 
 		return $data;
 	}
 
 	/**
-	 * Extract text from Claude API response.
+	 * Extract text from Google AI API response.
 	 *
 	 * @param array $response The API response.
 	 * @return string|false The extracted text or false on failure.
@@ -233,18 +217,64 @@ class Claude_API implements AI_Provider {
 			return false;
 		}
 
-		if ( ! isset( $response['content'] ) || ! is_array( $response['content'] ) ) {
+		if ( ! isset( $response['candidates'] ) || ! is_array( $response['candidates'] ) || empty( $response['candidates'] ) ) {
 			return false;
 		}
 
-		// Find the first text block
-		foreach ( $response['content'] as $block ) {
-			if ( isset( $block['type'] ) && 'text' === $block['type'] && isset( $block['text'] ) ) {
-				return trim( $block['text'] );
-			}
+		$first_candidate = $response['candidates'][0];
+		if ( isset( $first_candidate['content']['parts'][0]['text'] ) ) {
+			return trim( $first_candidate['content']['parts'][0]['text'] );
 		}
 
 		return false;
+	}
+
+	/**
+	 * Test the API connection.
+	 *
+	 * @return bool|WP_Error True on success, WP_Error on failure.
+	 */
+	public function test_connection() {
+		$response = $this->send_message( 'Hello, please respond with "OK"', 50 );
+		
+		if ( is_wp_error( $response ) ) {
+			return $response;
+		}
+
+		return true;
+	}
+
+	/**
+	 * Get available models for Google AI.
+	 *
+	 * @return array Array of model_id => model_name pairs.
+	 */
+	public function get_available_models() {
+		return array(
+			'gemini-2.0-flash-exp'    => 'Gemini 2.0 Flash (Experimental)',
+			'gemini-1.5-pro-latest'   => 'Gemini 1.5 Pro (Recommended)',
+			'gemini-1.5-flash-latest' => 'Gemini 1.5 Flash',
+			'gemini-1.0-pro'          => 'Gemini 1.0 Pro',
+		);
+	}
+
+	/**
+	 * Get the selected model.
+	 *
+	 * @return string The selected model ID.
+	 */
+	public function get_model() {
+		return get_option( 'claude_post_processor_google_model', 'gemini-1.5-pro-latest' );
+	}
+
+	/**
+	 * Set the selected model.
+	 *
+	 * @param string $model The model ID to use.
+	 * @return bool True on success, false on failure.
+	 */
+	public function set_model( $model ) {
+		return update_option( 'claude_post_processor_google_model', $model );
 	}
 
 	/**
@@ -258,13 +288,12 @@ class Claude_API implements AI_Provider {
 		
 		if ( ! file_exists( $log_dir ) ) {
 			wp_mkdir_p( $log_dir );
-			// Add .htaccess to protect logs
 			file_put_contents( $log_dir . '/.htaccess', 'Deny from all' );
 		}
 
 		$log_file = $log_dir . '/api-calls-' . gmdate( 'Y-m-d' ) . '.log';
 		$log_entry = sprintf(
-			"[%s] Prompt length: %d characters, Response: %s\n",
+			"[%s] [Google AI] Prompt length: %d characters, Response: %s\n",
 			gmdate( 'Y-m-d H:i:s' ),
 			strlen( $prompt ),
 			wp_json_encode( $response )
@@ -284,65 +313,17 @@ class Claude_API implements AI_Provider {
 		
 		if ( ! file_exists( $log_dir ) ) {
 			wp_mkdir_p( $log_dir );
-			// Add .htaccess to protect logs
 			file_put_contents( $log_dir . '/.htaccess', 'Deny from all' );
 		}
 
 		$log_file = $log_dir . '/errors-' . gmdate( 'Y-m-d' ) . '.log';
 		$log_entry = sprintf(
-			"[%s] ERROR: %s\n",
+			"[%s] [Google AI] ERROR: %s\n",
 			gmdate( 'Y-m-d H:i:s' ),
 			$message
 		);
 
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
 		file_put_contents( $log_file, $log_entry, FILE_APPEND );
-	}
-
-	/**
-	 * Test the API connection.
-	 *
-	 * @return bool|WP_Error True on success, WP_Error on failure.
-	 */
-	public function test_connection() {
-		$response = $this->send_message( 'Hello, please respond with "OK"', 50 );
-		
-		if ( is_wp_error( $response ) ) {
-			return $response;
-		}
-
-		return true;
-	}
-
-	/**
-	 * Get available models for Claude.
-	 *
-	 * @return array Array of model_id => model_name pairs.
-	 */
-	public function get_available_models() {
-		return array(
-			'claude-sonnet-4-20250514'   => 'Claude Sonnet 4 (Recommended)',
-			'claude-3-5-sonnet-20241022' => 'Claude 3.5 Sonnet',
-			'claude-3-opus-20240229'     => 'Claude 3 Opus',
-		);
-	}
-
-	/**
-	 * Get the selected model.
-	 *
-	 * @return string The selected model ID.
-	 */
-	public function get_model() {
-		return get_option( 'claude_post_processor_model', 'claude-sonnet-4-20250514' );
-	}
-
-	/**
-	 * Set the selected model.
-	 *
-	 * @param string $model The model ID to use.
-	 * @return bool True on success, false on failure.
-	 */
-	public function set_model( $model ) {
-		return update_option( 'claude_post_processor_model', $model );
 	}
 }

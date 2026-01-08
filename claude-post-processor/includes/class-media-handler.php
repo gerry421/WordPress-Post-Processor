@@ -42,6 +42,12 @@ class Media_Handler {
 	 * @return string The processed content.
 	 */
 	public function process_images( $content, $post_id ) {
+		// Check if content already has WordPress block gallery or images
+		if ( $this->has_wordpress_blocks( $content ) ) {
+			// Content already has block editor formatting, preserve it
+			return $content;
+		}
+
 		// Get all attached images
 		$attachments = get_attached_media( 'image', $post_id );
 		
@@ -49,30 +55,139 @@ class Media_Handler {
 			return $content;
 		}
 
+		// Get image IDs that are not already in the content
 		$attachment_ids = array_keys( $attachments );
-		$image_count = count( $attachment_ids );
+		$used_ids = $this->get_images_in_content( $content );
+		$new_attachment_ids = array_diff( $attachment_ids, $used_ids );
 
-		// Remove existing image tags from content
+		if ( empty( $new_attachment_ids ) ) {
+			// All images are already in content
+			return $content;
+		}
+
+		$image_count = count( $new_attachment_ids );
+
+		// Remove standalone image tags (not in blocks) from content
 		$content = preg_replace( '/<img[^>]+>/i', '', $content );
 
 		if ( 1 === $image_count ) {
-			// Single image - display as featured image
-			$image_id = $attachment_ids[0];
-			$image_html = wp_get_attachment_image( $image_id, 'large', false, array( 'class' => 'single-post-image' ) );
-			$caption = wp_get_attachment_caption( $image_id );
-			
-			if ( $caption ) {
-				$image_html = '<figure class="wp-block-image size-large">' . $image_html . '<figcaption>' . esc_html( $caption ) . '</figcaption></figure>';
-			}
-			
-			$content .= "\n\n" . $image_html;
+			// Single image - display as WordPress block image
+			$image_id = array_values( $new_attachment_ids )[0];
+			$image_block = $this->create_image_block( $image_id );
+			$content .= "\n\n" . $image_block;
 		} else {
-			// Multiple images - create gallery
-			$gallery_shortcode = '[gallery ids="' . implode( ',', $attachment_ids ) . '" columns="3" link="file" size="large"]';
-			$content .= "\n\n" . $gallery_shortcode;
+			// Multiple images - create WordPress block gallery
+			$gallery_block = $this->create_gallery_block( $new_attachment_ids );
+			$content .= "\n\n" . $gallery_block;
 		}
 
 		return $content;
+	}
+
+	/**
+	 * Check if content has WordPress block editor formatting.
+	 *
+	 * @param string $content The post content.
+	 * @return bool True if content has WordPress blocks.
+	 */
+	private function has_wordpress_blocks( $content ) {
+		return preg_match( '/<!-- wp:(gallery|image|media-text)/', $content );
+	}
+
+	/**
+	 * Get image IDs already used in content.
+	 *
+	 * @param string $content The post content.
+	 * @return array Array of attachment IDs found in content.
+	 */
+	private function get_images_in_content( $content ) {
+		$ids = array();
+		
+		// Match WordPress block gallery/image IDs
+		if ( preg_match_all( '/"id":(\d+)/', $content, $matches ) ) {
+			$ids = array_merge( $ids, $matches[1] );
+		}
+		
+		// Match gallery shortcode IDs
+		if ( preg_match( '/\[gallery[^\]]*ids="([^"]+)"/', $content, $matches ) ) {
+			$shortcode_ids = explode( ',', $matches[1] );
+			$ids = array_merge( $ids, $shortcode_ids );
+		}
+		
+		return array_unique( array_map( 'intval', $ids ) );
+	}
+
+	/**
+	 * Create a WordPress block image.
+	 *
+	 * @param int $image_id The attachment ID.
+	 * @return string The image block HTML.
+	 */
+	private function create_image_block( $image_id ) {
+		$image = wp_get_attachment_image_src( $image_id, 'large' );
+		$alt = get_post_meta( $image_id, '_wp_attachment_image_alt', true );
+		$caption = wp_get_attachment_caption( $image_id );
+		
+		if ( ! $image ) {
+			return '';
+		}
+
+		$block = '<!-- wp:image {"id":' . $image_id . ',"sizeSlug":"large","linkDestination":"none"} -->' . "\n";
+		$block .= '<figure class="wp-block-image size-large">';
+		$block .= '<img src="' . esc_url( $image[0] ) . '" alt="' . esc_attr( $alt ) . '" class="wp-image-' . $image_id . '"/>';
+		
+		if ( $caption ) {
+			$block .= '<figcaption class="wp-element-caption">' . esc_html( $caption ) . '</figcaption>';
+		}
+		
+		$block .= '</figure>' . "\n";
+		$block .= '<!-- /wp:image -->';
+		
+		return $block;
+	}
+
+	/**
+	 * Create a WordPress block gallery.
+	 *
+	 * @param array $image_ids Array of attachment IDs.
+	 * @return string The gallery block HTML.
+	 */
+	private function create_gallery_block( $image_ids ) {
+		$images_json = array();
+		$images_html = '';
+		
+		foreach ( $image_ids as $image_id ) {
+			$image = wp_get_attachment_image_src( $image_id, 'large' );
+			if ( ! $image ) {
+				continue;
+			}
+			
+			$alt = get_post_meta( $image_id, '_wp_attachment_image_alt', true );
+			$caption = wp_get_attachment_caption( $image_id );
+			
+			$images_json[] = array(
+				'id'  => $image_id,
+				'url' => $image[0],
+				'alt' => $alt,
+			);
+			
+			$images_html .= '<figure class="wp-block-image size-large">';
+			$images_html .= '<img src="' . esc_url( $image[0] ) . '" alt="' . esc_attr( $alt ) . '" data-id="' . $image_id . '" class="wp-image-' . $image_id . '"/>';
+			
+			if ( $caption ) {
+				$images_html .= '<figcaption class="wp-element-caption">' . esc_html( $caption ) . '</figcaption>';
+			}
+			
+			$images_html .= '</figure>';
+		}
+		
+		$block = '<!-- wp:gallery {"linkTo":"none","sizeSlug":"large","className":"wp-block-gallery-1"} -->' . "\n";
+		$block .= '<figure class="wp-block-gallery has-nested-images columns-default is-cropped wp-block-gallery-1">';
+		$block .= $images_html;
+		$block .= '</figure>' . "\n";
+		$block .= '<!-- /wp:gallery -->';
+		
+		return $block;
 	}
 
 	/**
