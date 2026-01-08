@@ -53,6 +53,9 @@ class Post_Processor {
 		// Hook into save_post for auto-processing
 		add_action( 'save_post', array( $this, 'maybe_auto_process' ), 10, 3 );
 
+		// Background processing hook
+		add_action( 'claude_process_post_background', array( $this, 'process_post' ) );
+
 		// Add bulk action
 		add_filter( 'bulk_actions-edit-post', array( $this, 'add_bulk_action' ) );
 		add_filter( 'handle_bulk_actions-edit-post', array( $this, 'handle_bulk_action' ), 10, 3 );

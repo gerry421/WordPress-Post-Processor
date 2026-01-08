@@ -57,7 +57,13 @@ class Admin_Settings {
 	 */
 	public function register_settings() {
 		// API Configuration
-		register_setting( 'claude_post_processor_api', 'claude_post_processor_api_key' );
+		register_setting(
+			'claude_post_processor_api',
+			'claude_post_processor_api_key',
+			array(
+				'sanitize_callback' => array( $this, 'sanitize_api_key' ),
+			)
+		);
 		register_setting( 'claude_post_processor_api', 'claude_post_processor_model' );
 
 		// Processing Options
@@ -524,5 +530,33 @@ class Admin_Settings {
 			</p>
 		</div>
 		<?php
+	}
+
+	/**
+	 * Sanitize and encrypt API key before saving.
+	 *
+	 * @param string $value The API key value.
+	 * @return string The sanitized and encrypted value.
+	 */
+	public function sanitize_api_key( $value ) {
+		// If the value is the placeholder, don't update it
+		if ( '****************************************' === $value ) {
+			return get_option( 'claude_post_processor_api_key', '' );
+		}
+
+		// Sanitize the input
+		$value = sanitize_text_field( $value );
+
+		// If empty, return empty
+		if ( empty( $value ) ) {
+			return '';
+		}
+
+		// Encrypt using the Claude_API class
+		$api = new Claude_API();
+		$api->set_api_key( $value );
+
+		// Return the encrypted value that was stored
+		return get_option( 'claude_post_processor_api_key', '' );
 	}
 }
