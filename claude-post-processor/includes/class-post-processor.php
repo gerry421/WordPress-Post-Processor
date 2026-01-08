@@ -474,7 +474,7 @@ class Post_Processor {
 			if ( 'claude_reprocess' === $action ) {
 				$this->clear_processing_meta( $post_id );
 			}
-			
+
 			$result = $this->process_post( $post_id );
 			if ( ! is_wp_error( $result ) ) {
 				$processed++;

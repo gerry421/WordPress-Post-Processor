@@ -336,6 +336,8 @@ class Admin_Settings {
 	 */
 	private function render_processed_tab() {
 		$processed_posts = $this->processor->get_processed_posts();
+		$date_format = get_option( 'date_format' );
+		$time_format = get_option( 'time_format' );
 		?>
 		<h2><?php esc_html_e( 'Processed Posts', 'claude-post-processor' ); ?></h2>
 		
@@ -375,7 +377,7 @@ class Admin_Settings {
 									<span style="color: green;">✓</span>
 									<?php
 									if ( $processed_date ) {
-										echo esc_html( date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $processed_date ) );
+										echo esc_html( date_i18n( $date_format . ' ' . $time_format, $processed_date ) );
 									} else {
 										esc_html_e( 'Unknown', 'claude-post-processor' );
 									}
