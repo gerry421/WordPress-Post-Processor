@@ -18,6 +18,13 @@ if ( ! defined( 'WPINC' ) ) {
 class Post_Processor {
 
 	/**
+	 * Minimum content length for historical enrichment validation.
+	 *
+	 * @var int
+	 */
+	const MIN_ENRICHMENT_LENGTH = 20;
+
+	/**
 	 * Claude API handler.
 	 *
 	 * @var AI_Provider
@@ -405,9 +412,9 @@ class Post_Processor {
 			return '';
 		}
 
-		// Validate content has meaningful length (at least 20 characters after stripping tags)
+		// Validate content has meaningful length
 		$content_check = strip_tags( $enrichment );
-		if ( strlen( trim( $content_check ) ) < 20 ) {
+		if ( strlen( trim( $content_check ) ) < self::MIN_ENRICHMENT_LENGTH ) {
 			return '';
 		}
 
