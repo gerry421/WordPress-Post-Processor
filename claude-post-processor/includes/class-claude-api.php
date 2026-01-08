@@ -88,7 +88,7 @@ class Claude_API implements AI_Provider {
 		$key = wp_salt( 'auth' );
 		
 		// Use openssl for encryption if available
-		if ( function_exists( 'openssl_encrypt' ) ) {
+		if ( function_exists( 'openssl_encrypt' ) && function_exists( 'random_bytes' ) ) {
 			$iv = random_bytes( 16 );
 			$encrypted = openssl_encrypt( $api_key, 'AES-256-CBC', $key, 0, $iv );
 			return base64_encode( $encrypted . '::' . $iv );

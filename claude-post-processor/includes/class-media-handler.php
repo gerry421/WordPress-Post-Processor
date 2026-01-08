@@ -91,7 +91,7 @@ class Media_Handler {
 	 * @return bool True if content has WordPress blocks.
 	 */
 	private function has_wordpress_blocks( $content ) {
-		return preg_match( '/<!-- wp:(gallery|image|media-text)/', $content );
+		return preg_match( '/<!-- wp:(gallery|image|media-text|columns|group)/', $content ) > 0;
 	}
 
 	/**
@@ -181,8 +181,8 @@ class Media_Handler {
 			$images_html .= '</figure>';
 		}
 		
-		$block = '<!-- wp:gallery {"linkTo":"none","sizeSlug":"large","className":"wp-block-gallery-1"} -->' . "\n";
-		$block .= '<figure class="wp-block-gallery has-nested-images columns-default is-cropped wp-block-gallery-1">';
+		$block = '<!-- wp:gallery {"linkTo":"none","sizeSlug":"large"} -->' . "\n";
+		$block .= '<figure class="wp-block-gallery has-nested-images columns-default is-cropped">';
 		$block .= $images_html;
 		$block .= '</figure>' . "\n";
 		$block .= '<!-- /wp:gallery -->';
