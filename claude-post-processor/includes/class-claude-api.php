@@ -80,7 +80,7 @@ class Claude_API {
 		
 		// Use openssl for encryption if available
 		if ( function_exists( 'openssl_encrypt' ) ) {
-			$iv     = openssl_random_pseudo_bytes( 16 );
+			$iv = random_bytes( 16 );
 			$encrypted = openssl_encrypt( $api_key, 'AES-256-CBC', $key, 0, $iv );
 			return base64_encode( $encrypted . '::' . $iv );
 		}
