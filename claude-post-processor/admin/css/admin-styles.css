@@ -92,6 +92,36 @@ hr.enrichment-separator {
     opacity: 0.5;
 }
 
+/* Historical enrichment quote block styling */
+.wp-block-quote.historical-enrichment,
+blockquote.wp-block-quote {
+    border-left: 4px solid #2271b1;
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    padding: 20px 25px;
+    margin: 30px 0;
+    font-size: 0.95em;
+    line-height: 1.6;
+}
+
+.wp-block-quote.historical-enrichment p strong,
+blockquote.wp-block-quote p strong {
+    color: #2271b1;
+    font-size: 1.1em;
+}
+
+.wp-block-quote.historical-enrichment p em,
+blockquote.wp-block-quote p em {
+    color: #666;
+    font-style: italic;
+}
+
+.wp-block-quote.historical-enrichment hr,
+blockquote.wp-block-quote hr {
+    margin: 15px 0;
+    border: none;
+    border-top: 1px solid #ccc;
+}
+
 /* Admin Settings Page Styles */
 .claude-post-processor-settings {
     max-width: 1200px;

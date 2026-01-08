@@ -35,21 +35,29 @@ Claude Post Processor is a comprehensive WordPress plugin that leverages Anthrop
 ### 2. Historical Enrichment
 
 #### Location-Based Enhancement
-- **Place Detection**: Automatically identifies locations, landmarks, and historical sites in your content
-- **Historical Context**: Adds 2-3 sentences of historical background
+- **Place Detection**: Automatically identifies SPECIFIC locations, landmarks, and historical sites in your content
+- **Quality Guidelines**: Only includes named, specific places (not generic references like "the park" or "home")
+- **Central to Narrative**: Focuses on locations that are central to the story
+- **Historical Context**: Adds 2-3 sentences of historical background with specific dates and events
 - **Interesting Facts**: Includes lesser-known details visitors might not know
-- **Cultural Significance**: Highlights relevant historical importance
+- **Cultural Significance**: Highlights relevant historical importance with substantive information
 
-#### Beautiful Formatting
-- **Blockquote Styling**: Enrichment displayed in elegant blockquote format
-- **Visual Separation**: Horizontal rules separate enrichment from main content
-- **Location Icons**: WordPress dashicons enhance visual appeal
-- **Gradient Background**: Subtle gradient for professional look
+#### WordPress Quote Block Format
+- **Block Editor Compatible**: Uses native WordPress quote block format (`<!-- wp:quote -->`)
+- **Professional Styling**: Blue border with gradient background for visual appeal
+- **Structured Content**: Organized with location name, historical context, and "Did you know?" facts
+- **Responsive Design**: Adapts to different screen sizes seamlessly
+
+#### Conditional Display
+- **Smart Detection**: Only displays when SPECIFIC places are mentioned
+- **Quality Control**: Returns empty if no specific locations found
+- **User Control**: Can be disabled via Settings > Processing Options
+- **Default Enabled**: Feature is on by default but can be toggled off
 
 #### Smart Placement
 - **Correct Order**: Inserted AFTER main narrative
 - **Before Media**: Appears BEFORE photo galleries and other media
-- **Non-Intrusive**: Only added when locations are actually mentioned
+- **Non-Intrusive**: Only added when it adds value to the content
 
 ### 3. Advanced Media Handling
 
@@ -100,6 +108,7 @@ Claude Post Processor is a comprehensive WordPress plugin that leverages Anthrop
 - **Original Backup**: Content and title backed up before processing
 - **Processing Log**: Detailed log of all operations performed
 - **Email Notifications**: Optional email when processing completes
+- **Historical Context Toggle**: Enable or disable historical enrichment feature (enabled by default)
 
 ### 5. Security Features
 
@@ -191,6 +200,7 @@ Claude Post Processor is a comprehensive WordPress plugin that leverages Anthrop
 - `claude_post_processor_model`: Selected Claude model
 - `claude_post_processor_auto_process`: Auto-processing enabled/disabled
 - `claude_post_processor_email_notifications`: Email notifications enabled/disabled
+- `claude_post_processor_include_historical`: Historical context enabled/disabled (default: true)
 
 #### Clean Uninstall
 - **Complete Cleanup**: Removes all options on uninstall

@@ -93,6 +93,15 @@ class Admin_Settings {
 		// Processing Options
 		register_setting( 'claude_post_processor_options', 'claude_post_processor_auto_process' );
 		register_setting( 'claude_post_processor_options', 'claude_post_processor_email_notifications' );
+		register_setting(
+			'claude_post_processor_options',
+			'claude_post_processor_include_historical',
+			array(
+				'type'              => 'boolean',
+				'sanitize_callback' => 'rest_sanitize_boolean',
+				'default'           => true,
+			)
+		);
 
 		// API Configuration Section
 		add_settings_section(
@@ -178,6 +187,14 @@ class Admin_Settings {
 			'claude_email_notifications',
 			__( 'Email Notifications', 'claude-post-processor' ),
 			array( $this, 'render_email_notifications_field' ),
+			'claude_post_processor_options',
+			'claude_options_section'
+		);
+
+		add_settings_field(
+			'claude_post_processor_include_historical',
+			__( 'Include Historical Context', 'claude-post-processor' ),
+			array( $this, 'render_include_historical_field' ),
 			'claude_post_processor_options',
 			'claude_options_section'
 		);
@@ -657,6 +674,23 @@ class Admin_Settings {
 				   value="1" 
 				   <?php checked( $email_notifications, true ); ?>>
 			<?php esc_html_e( 'Send email notifications when posts are processed', 'claude-post-processor' ); ?>
+		</label>
+		<?php
+	}
+
+	/**
+	 * Render include historical context field.
+	 */
+	public function render_include_historical_field() {
+		$include_historical = get_option( 'claude_post_processor_include_historical', true );
+		?>
+		<label>
+			<input type="checkbox" 
+				   name="claude_post_processor_include_historical" 
+				   id="claude_post_processor_include_historical" 
+				   value="1" 
+				   <?php checked( $include_historical, true ); ?>>
+			<?php esc_html_e( 'Add historical context for locations mentioned in posts', 'claude-post-processor' ); ?>
 		</label>
 		<?php
 	}

@@ -16,7 +16,9 @@
 ## Processing Options
 - [ ] Auto-process toggle works
 - [ ] Email notifications toggle works
+- [ ] Include historical context toggle works
 - [ ] Settings save correctly
+- [ ] Default value for historical context is true
 
 ## Grammar and Spelling Correction
 - [ ] Content is sent to Claude API
@@ -46,11 +48,16 @@
 
 ## Historical Enrichment
 - [ ] Places/landmarks are identified in content
-- [ ] Historical context is provided (2-3 sentences)
-- [ ] Interesting facts are included
-- [ ] HTML formatting is correct with blockquote
-- [ ] Horizontal rules appear before and after enrichment
+- [ ] Only SPECIFIC places included (not generic like "the park")
+- [ ] NO_PLACES_FOUND returned when no specific locations found
+- [ ] Historical context is provided (2-3 sentences with specific dates)
+- [ ] Interesting facts are included (lesser-known information)
+- [ ] WordPress quote block format is correct (<!-- wp:quote -->)
+- [ ] Quote block has proper class (wp-block-quote)
+- [ ] Content validation passes (at least 20 characters)
 - [ ] Enrichment appears AFTER narrative and BEFORE media
+- [ ] Setting toggle enables/disables feature
+- [ ] Default setting is enabled (true)
 
 ## Media Handling - Images
 - [ ] Single images display as featured image
@@ -180,9 +187,12 @@
 ## CSS Styling
 - [ ] Video embeds display correctly (16:9 aspect ratio)
 - [ ] PDF embeds display correctly
-- [ ] Historical enrichment styled with blockquote
-- [ ] Location icon appears in enrichment section
-- [ ] Horizontal rules styled correctly
+- [ ] Historical enrichment styled with WordPress quote block
+- [ ] Quote block has blue border (4px solid #2271b1)
+- [ ] Quote block has gradient background
+- [ ] Strong elements in quote block colored correctly (#2271b1)
+- [ ] Em elements in quote block styled correctly (#666, italic)
+- [ ] Horizontal rules in quote block styled correctly
 - [ ] Responsive design works on mobile
 - [ ] Admin styles load on settings page
 - [ ] Admin styles load on post edit screens

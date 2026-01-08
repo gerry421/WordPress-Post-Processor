@@ -18,6 +18,13 @@ if ( ! defined( 'WPINC' ) ) {
 class Post_Processor {
 
 	/**
+	 * Minimum content length for historical enrichment validation.
+	 *
+	 * @var int
+	 */
+	const MIN_ENRICHMENT_LENGTH = 20;
+
+	/**
 	 * Claude API handler.
 	 *
 	 * @var AI_Provider
@@ -181,14 +188,19 @@ class Post_Processor {
 		// Add delay between API calls
 		sleep( 2 );
 
-		// Step 5: Historical enrichment
-		$processing_log[] = 'Starting historical enrichment';
-		$enrichment = $this->generate_historical_enrichment( $content );
-		if ( ! is_wp_error( $enrichment ) && ! empty( $enrichment ) ) {
-			$processing_log[] = 'Historical enrichment completed';
+		// Step 5: Historical enrichment (if enabled)
+		$enrichment = '';
+		if ( get_option( 'claude_post_processor_include_historical', true ) ) {
+			$processing_log[] = 'Starting historical enrichment';
+			$enrichment = $this->generate_historical_enrichment( $content );
+			if ( ! is_wp_error( $enrichment ) && ! empty( $enrichment ) ) {
+				$processing_log[] = 'Historical enrichment completed';
+			} else {
+				$enrichment = '';
+				$processing_log[] = 'Historical enrichment failed or returned empty';
+			}
 		} else {
-			$enrichment = '';
-			$processing_log[] = 'Historical enrichment failed or returned empty';
+			$processing_log[] = 'Historical enrichment skipped (disabled in settings)';
 		}
 
 		// Step 6: Assemble final content
@@ -356,22 +368,26 @@ class Post_Processor {
 	 * @return string|WP_Error Historical enrichment HTML or WP_Error on failure.
 	 */
 	private function generate_historical_enrichment( $content ) {
-		$prompt = "Identify any places, landmarks, historical sites, or locations mentioned in the following narrative. For each location found, provide:\n";
-		$prompt .= "- A brief historical context (2-3 sentences)\n";
-		$prompt .= "- One interesting fact visitors might not know\n";
-		$prompt .= "- Any relevant historical significance\n\n";
-		$prompt .= "Format the response as HTML using blockquote styling with horizontal rule separators:\n\n";
-		$prompt .= "<hr class=\"enrichment-separator\" />\n";
-		$prompt .= "<blockquote class=\"historical-enrichment\">\n";
-		$prompt .= "  <h3>Historical Context</h3>\n";
-		$prompt .= "  <div class=\"location-info\">\n";
-		$prompt .= "    <h4>[Location Name]</h4>\n";
-		$prompt .= "    <p>[Historical context and interesting facts]</p>\n";
-		$prompt .= "  </div>\n";
-		$prompt .= "  <!-- Repeat for each location -->\n";
+		$prompt = "Analyze the following narrative and identify SPECIFIC places, landmarks, or historical sites mentioned.\n\n";
+		$prompt .= "IMPORTANT QUALITY GUIDELINES:\n";
+		$prompt .= "- Only include SPECIFIC, named locations (e.g., 'Eiffel Tower', 'Golden Gate Bridge', 'Notre-Dame Cathedral')\n";
+		$prompt .= "- DO NOT include generic references (e.g., 'the park', 'home', 'a restaurant', 'the beach')\n";
+		$prompt .= "- Only include locations that are CENTRAL to the narrative\n";
+		$prompt .= "- If NO specific places are found, return exactly: NO_PLACES_FOUND\n\n";
+		$prompt .= "For each SPECIFIC location found, provide:\n";
+		$prompt .= "- Historical context (2-3 sentences) with SPECIFIC dates and events\n";
+		$prompt .= "- One interesting, LESSER-KNOWN fact (avoid obvious information)\n";
+		$prompt .= "- Focus on substantive historical information, not trivial details\n\n";
+		$prompt .= "Format the response as a WordPress quote block with the following EXACT structure:\n\n";
+		$prompt .= "<!-- wp:quote -->\n";
+		$prompt .= "<blockquote class=\"wp-block-quote\">\n";
+		$prompt .= "  <p><strong>📍 Historical Context</strong></p>\n";
+		$prompt .= "  <p><strong>[Location Name]</strong><br>\n";
+		$prompt .= "  [Historical context in 2-3 sentences. Include specific dates and events.]</p>\n";
+		$prompt .= "  <p><em>Did you know?</em> [Interesting lesser-known fact]</p>\n";
+		$prompt .= "  <!-- Repeat for additional locations -->\n";
 		$prompt .= "</blockquote>\n";
-		$prompt .= "<hr class=\"enrichment-separator\" />\n\n";
-		$prompt .= "If no specific places are mentioned, return an empty string.\n\n";
+		$prompt .= "<!-- /wp:quote -->\n\n";
 		$prompt .= "Narrative:\n" . $content;
 
 		$response = $this->api->send_message( $prompt );
@@ -384,6 +400,22 @@ class Post_Processor {
 		
 		if ( false === $enrichment ) {
 			return new WP_Error( 'extraction_failed', __( 'Failed to extract historical enrichment.', 'claude-post-processor' ) );
+		}
+
+		// Check if no places were found
+		if ( false !== stripos( $enrichment, 'NO_PLACES_FOUND' ) ) {
+			return '';
+		}
+
+		// Validate that proper quote block format exists
+		if ( false === strpos( $enrichment, 'wp:quote' ) || false === strpos( $enrichment, 'wp-block-quote' ) ) {
+			return '';
+		}
+
+		// Validate content has meaningful length
+		$content_check = strip_tags( $enrichment );
+		if ( strlen( trim( $content_check ) ) < self::MIN_ENRICHMENT_LENGTH ) {
+			return '';
 		}
 
 		return $enrichment;
@@ -405,8 +437,8 @@ class Post_Processor {
 
 		$content = $narrative;
 
-		// Add historical enrichment if available
-		if ( ! empty( $enrichment ) && trim( $enrichment ) !== '' ) {
+		// Add historical enrichment if available (only if not empty after trimming)
+		if ( ! empty( trim( $enrichment ) ) ) {
 			$content .= "\n\n" . $enrichment;
 		}
 
