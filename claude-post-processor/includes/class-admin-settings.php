@@ -552,11 +552,29 @@ class Admin_Settings {
 			return '';
 		}
 
-		// Encrypt using the Claude_API class
-		$api = new Claude_API();
-		$api->set_api_key( $value );
+		// Encrypt the API key and return it
+		// Let WordPress's register_setting() handle the update_option() call
+		return $this->encrypt_api_key_helper( $value );
+	}
 
-		// Return the encrypted value that was stored
-		return get_option( 'claude_post_processor_api_key', '' );
+	/**
+	 * Helper method to encrypt API key.
+	 *
+	 * @param string $api_key The API key to encrypt.
+	 * @return string The encrypted API key.
+	 */
+	private function encrypt_api_key_helper( $api_key ) {
+		// Use WordPress salt as encryption key
+		$key = wp_salt( 'auth' );
+		
+		// Use openssl for encryption if available
+		if ( function_exists( 'openssl_encrypt' ) ) {
+			$iv = openssl_random_pseudo_bytes( 16 );
+			$encrypted = openssl_encrypt( $api_key, 'AES-256-CBC', $key, 0, $iv );
+			return base64_encode( $encrypted . '::' . $iv );
+		}
+		
+		// Fallback to base64 encoding (not secure, but better than plaintext)
+		return base64_encode( $api_key );
 	}
 }
