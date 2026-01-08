@@ -37,6 +37,7 @@ class Admin_Settings {
 		add_action( 'admin_notices', array( $this, 'show_admin_notices' ) );
 		add_action( 'wp_dashboard_setup', array( $this, 'add_dashboard_widget' ) );
 		add_action( 'admin_post_claude_process_selected', array( $this, 'handle_manual_processing' ) );
+		add_action( 'admin_post_claude_reprocess_selected', array( $this, 'handle_reprocessing' ) );
 	}
 
 	/**
@@ -205,6 +206,9 @@ class Admin_Settings {
 				<a href="?page=claude-post-processor&tab=manual" class="nav-tab <?php echo 'manual' === $active_tab ? 'nav-tab-active' : ''; ?>">
 					<?php esc_html_e( 'Manual Processing', 'claude-post-processor' ); ?>
 				</a>
+				<a href="?page=claude-post-processor&tab=processed" class="nav-tab <?php echo 'processed' === $active_tab ? 'nav-tab-active' : ''; ?>">
+					<?php esc_html_e( 'Processed Posts', 'claude-post-processor' ); ?>
+				</a>
 				<a href="?page=claude-post-processor&tab=logs" class="nav-tab <?php echo 'logs' === $active_tab ? 'nav-tab-active' : ''; ?>">
 					<?php esc_html_e( 'Logs', 'claude-post-processor' ); ?>
 				</a>
@@ -221,6 +225,9 @@ class Admin_Settings {
 						break;
 					case 'manual':
 						$this->render_manual_tab();
+						break;
+					case 'processed':
+						$this->render_processed_tab();
 						break;
 					case 'logs':
 						$this->render_logs_tab();
@@ -321,6 +328,75 @@ class Admin_Settings {
 			<h3><?php esc_html_e( 'Processing Status', 'claude-post-processor' ); ?></h3>
 			<div id="processing-log"></div>
 		</div>
+		<?php
+	}
+
+	/**
+	 * Render processed posts tab.
+	 */
+	private function render_processed_tab() {
+		$processed_posts = $this->processor->get_processed_posts();
+		?>
+		<h2><?php esc_html_e( 'Processed Posts', 'claude-post-processor' ); ?></h2>
+		
+		<?php if ( empty( $processed_posts ) ) : ?>
+			<p><?php esc_html_e( 'No processed posts found.', 'claude-post-processor' ); ?></p>
+		<?php else : ?>
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" onsubmit="return confirm('<?php echo esc_js( __( 'Are you sure you want to reprocess these posts? This will overwrite the existing processed content.', 'claude-post-processor' ) ); ?>');">
+				<input type="hidden" name="action" value="claude_reprocess_selected">
+				<?php wp_nonce_field( 'claude_reprocess_selected', 'claude_reprocess_nonce' ); ?>
+				
+				<table class="wp-list-table widefat fixed striped">
+					<thead>
+						<tr>
+							<td class="check-column"><input type="checkbox" id="select-all-processed-posts"></td>
+							<th><?php esc_html_e( 'Title', 'claude-post-processor' ); ?></th>
+							<th><?php esc_html_e( 'Original Processing Date', 'claude-post-processor' ); ?></th>
+							<th><?php esc_html_e( 'Current Status', 'claude-post-processor' ); ?></th>
+						</tr>
+					</thead>
+					<tbody>
+						<?php foreach ( $processed_posts as $post ) : ?>
+							<?php
+							$processed_date = get_post_meta( $post->ID, '_claude_processed_date', true );
+							?>
+							<tr>
+								<th class="check-column">
+									<input type="checkbox" name="post_ids[]" value="<?php echo esc_attr( $post->ID ); ?>">
+								</th>
+								<td>
+									<strong>
+										<a href="<?php echo esc_url( get_edit_post_link( $post->ID ) ); ?>">
+											<?php echo esc_html( $post->post_title ); ?>
+										</a>
+									</strong>
+								</td>
+								<td>
+									<span style="color: green;">✓</span>
+									<?php
+									if ( $processed_date ) {
+										echo esc_html( date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $processed_date ) );
+									} else {
+										esc_html_e( 'Unknown', 'claude-post-processor' );
+									}
+									?>
+								</td>
+								<td><?php echo esc_html( ucfirst( $post->post_status ) ); ?></td>
+							</tr>
+						<?php endforeach; ?>
+					</tbody>
+				</table>
+
+				<p class="submit">
+					<button type="submit" name="reprocess_type" value="selected" class="button button-primary">
+						<?php esc_html_e( 'Reprocess Selected', 'claude-post-processor' ); ?>
+					</button>
+					<button type="submit" name="reprocess_type" value="all" class="button">
+						<?php esc_html_e( 'Reprocess All Processed', 'claude-post-processor' ); ?>
+					</button>
+				</p>
+			</form>
+		<?php endif; ?>
 		<?php
 	}
 
@@ -627,6 +703,53 @@ class Admin_Settings {
 	}
 
 	/**
+	 * Handle reprocessing form submission.
+	 */
+	public function handle_reprocessing() {
+		// Verify nonce
+		if ( ! isset( $_POST['claude_reprocess_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['claude_reprocess_nonce'] ) ), 'claude_reprocess_selected' ) ) {
+			wp_die( esc_html__( 'Security check failed.', 'claude-post-processor' ) );
+		}
+
+		// Check permissions
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'You do not have permission to reprocess posts.', 'claude-post-processor' ) );
+		}
+
+		$reprocess_type = isset( $_POST['reprocess_type'] ) ? sanitize_text_field( wp_unslash( $_POST['reprocess_type'] ) ) : 'selected';
+		$post_ids = array();
+
+		if ( 'all' === $reprocess_type ) {
+			$processed = $this->processor->get_processed_posts();
+			$post_ids = wp_list_pluck( $processed, 'ID' );
+		} elseif ( isset( $_POST['post_ids'] ) && is_array( $_POST['post_ids'] ) ) {
+			$post_ids = array_map( 'absint', wp_unslash( $_POST['post_ids'] ) );
+		}
+
+		if ( empty( $post_ids ) ) {
+			wp_safe_redirect( admin_url( 'options-general.php?page=claude-post-processor&tab=processed&error=no_posts' ) );
+			exit;
+		}
+
+		$reprocessed = 0;
+		foreach ( $post_ids as $post_id ) {
+			// Clear processing metadata
+			$this->processor->clear_processing_meta( $post_id );
+			
+			// Process the post
+			$result = $this->processor->process_post( $post_id );
+			if ( ! is_wp_error( $result ) ) {
+				$reprocessed++;
+			}
+			// Add delay between posts
+			sleep( 2 );
+		}
+
+		wp_safe_redirect( admin_url( 'options-general.php?page=claude-post-processor&tab=processed&reprocessed=' . $reprocessed ) );
+		exit;
+	}
+
+	/**
 	 * Show admin notices.
 	 */
 	public function show_admin_notices() {
@@ -659,6 +782,25 @@ class Admin_Settings {
 						sprintf(
 							/* translators: %d: Number of posts processed */
 							_n( '%d post processed successfully.', '%d posts processed successfully.', $count, 'claude-post-processor' ),
+							$count
+						)
+					);
+					?>
+				</p>
+			</div>
+			<?php
+		}
+
+		if ( isset( $_GET['reprocessed'] ) ) {
+			$count = absint( $_GET['reprocessed'] );
+			?>
+			<div class="notice notice-success is-dismissible">
+				<p>
+					<?php
+					echo esc_html(
+						sprintf(
+							/* translators: %d: Number of posts reprocessed */
+							_n( '%d post reprocessed successfully.', '%d posts reprocessed successfully.', $count, 'claude-post-processor' ),
 							$count
 						)
 					);
