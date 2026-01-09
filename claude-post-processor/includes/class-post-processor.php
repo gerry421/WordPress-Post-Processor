@@ -25,6 +25,13 @@ class Post_Processor {
 	const MIN_ENRICHMENT_LENGTH = 20;
 
 	/**
+	 * Common words to exclude from keyword extraction.
+	 *
+	 * @var array
+	 */
+	const COMMON_WORDS = array( 'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'from', 'is', 'was', 'are', 'were', 'been', 'be', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'can', 'this', 'that', 'these', 'those' );
+
+	/**
 	 * Claude API handler.
 	 *
 	 * @var AI_Provider
@@ -374,8 +381,7 @@ class Post_Processor {
 	private function get_related_posts( $content, $post_id, $limit = 5 ) {
 		// Extract key terms from content
 		$words = str_word_count( strtolower( strip_tags( $content ) ), 1 );
-		$common_words = array( 'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'from', 'is', 'was', 'are', 'were', 'been', 'be', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'can', 'this', 'that', 'these', 'those' );
-		$words = array_diff( $words, $common_words );
+		$words = array_diff( $words, self::COMMON_WORDS );
 		
 		// Get word frequency
 		$word_freq = array_count_values( $words );
@@ -396,12 +402,18 @@ class Post_Processor {
 		$related_data = array();
 		
 		foreach ( $related_posts as $post ) {
+			$categories = get_the_category( $post->ID );
+			$category_names = array();
+			if ( ! empty( $categories ) && ! is_wp_error( $categories ) ) {
+				$category_names = wp_list_pluck( $categories, 'name' );
+			}
+			
 			$related_data[] = array(
 				'title' => $post->post_title,
 				'url'   => get_permalink( $post->ID ),
 				'excerpt' => wp_trim_words( $post->post_content, 30 ),
 				'tags'  => wp_get_post_tags( $post->ID, array( 'fields' => 'names' ) ),
-				'categories' => wp_get_post_categories( $post->ID, array( 'fields' => 'names' ) ),
+				'categories' => $category_names,
 			);
 		}
 		

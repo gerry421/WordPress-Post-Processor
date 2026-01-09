@@ -116,9 +116,9 @@ class Media_Handler {
 			$ids = array_merge( $ids, $matches[1] );
 		}
 		
-		// Match img tags with attachment_ID in src
-		if ( preg_match_all( '/wp-content\/uploads\/[^"]+\.(?:jpg|jpeg|png|gif|webp)/i', $content, $matches ) ) {
-			foreach ( $matches[0] as $url ) {
+		// Match img tags with image URLs and try to get attachment IDs
+		if ( preg_match_all( '/<img[^>]+src=["\']([^"\']+)["\']/', $content, $matches ) ) {
+			foreach ( $matches[1] as $url ) {
 				// Try to get attachment ID from URL
 				$attachment_id = attachment_url_to_postid( $url );
 				if ( $attachment_id ) {
