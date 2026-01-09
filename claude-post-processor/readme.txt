@@ -1,6 +1,6 @@
-=== Claude Post Processor ===
+=== AI Post Processor ===
 Contributors: gerry421
-Tags: ai, claude, anthropic, post-processing, content-enhancement
+Tags: ai, artificial-intelligence, post-processing, content-enhancement, openai, claude, gemini
 Requires at least: 6.0
 Tested up to: 6.4
 Requires PHP: 8.0
@@ -8,21 +8,22 @@ Stable tag: 1.0.0
 License: GPL-2.0+
 License URI: http://www.gnu.org/licenses/gpl-2.0.txt
 
-Automatically or manually processes WordPress posts using the Anthropic Claude API to enhance posts with AI-generated improvements.
+Automatically or manually processes WordPress posts using AI (Anthropic Claude, OpenAI, or Google Gemini) to enhance posts with AI-generated improvements.
 
 == Description ==
 
-Claude Post Processor is a powerful WordPress plugin that leverages the Anthropic Claude AI to automatically enhance your blog posts with:
+AI Post Processor is a powerful WordPress plugin that leverages multiple AI providers (Anthropic Claude, OpenAI, or Google Gemini) to automatically enhance your blog posts with:
 
 * **Grammar and Spelling Correction** - Automatically fixes grammar errors, spelling mistakes, and punctuation issues
-* **SEO-Friendly Titles** - Generates compelling, optimized titles based on your content
+* **Natural Titles** - Generates conversational, engaging titles based on your content
 * **Smart Tags** - Creates relevant tags automatically based on topics, themes, and locations
 * **Category Management** - Suggests and creates appropriate categories, including hierarchical ones
-* **Historical Enrichment** - Adds fascinating historical context for places and landmarks mentioned in your posts
+* **Historical Enrichment with RAG** - Adds historical context enriched with links to related posts, tags, and categories
 * **Media Optimization** - Properly handles photo galleries, PDFs, and video embeds
 
 = Features =
 
+* **Multiple AI Providers** - Choose from Anthropic Claude, OpenAI, or Google Gemini
 * **Automatic Processing** - Optionally process new posts automatically when created
 * **Manual Processing** - Process existing posts individually or in bulk
 * **Secure API Key Storage** - API keys are encrypted before storage
@@ -34,38 +35,48 @@ Claude Post Processor is a powerful WordPress plugin that leverages the Anthropi
 
 = Media Handling =
 
-* **Photo Galleries** - Automatically creates WordPress galleries from multiple images
+* **Photo Galleries** - Automatically creates WordPress block galleries from multiple images
+* **Single Images** - Creates proper WordPress image blocks
 * **PDF Embedding** - Displays PDFs inline with fallback download links
 * **YouTube Videos** - Converts YouTube links to responsive embeds
 * **Direct Videos** - Handles MP4, WebM, and MOV files with HTML5 video player
 
-= Historical Enrichment =
+= Historical Enrichment with RAG =
 
-When your posts mention places, landmarks, or historical sites, Claude Post Processor can:
+When your posts mention places, landmarks, or historical sites, AI Post Processor can:
 
-* Add historical context (2-3 sentences)
-* Include interesting facts visitors might not know
-* Highlight relevant historical significance
-* Format beautifully with blockquote styling
+* Add historical context (2-3 sentences) with specific dates and events
+* Include interesting, lesser-known facts
+* Link to related posts on your site
+* Reference relevant tags and categories
+* Use existing content to enrich and inform the historical context
+* Format beautifully with WordPress quote blocks
 
 == Installation ==
 
 1. Upload the plugin files to the `/wp-content/plugins/claude-post-processor` directory, or install the plugin through the WordPress plugins screen directly.
 2. Activate the plugin through the 'Plugins' screen in WordPress
-3. Go to Settings > Claude Post Processor to configure the plugin
-4. Enter your Anthropic API key (get one at https://console.anthropic.com/)
-5. Configure your processing options
-6. Start processing posts!
+3. Go to Settings > AI Post Processor to configure the plugin
+4. Select your preferred AI provider (Claude, OpenAI, or Google AI)
+5. Enter your API key for the selected provider
+6. Configure your processing options
+7. Start processing posts!
 
 == Frequently Asked Questions ==
 
 = Where do I get an API key? =
 
-You can get an Anthropic API key by signing up at https://console.anthropic.com/
+Depending on your chosen AI provider:
+* **Anthropic Claude**: https://console.anthropic.com/
+* **OpenAI**: https://platform.openai.com/api-keys
+* **Google AI**: https://aistudio.google.com/app/apikey
 
 = How much does the API cost? =
 
-Pricing varies by model. Check https://www.anthropic.com/pricing for current rates. The plugin uses Claude Sonnet 4 by default.
+Pricing varies by provider and model:
+* **Anthropic**: https://www.anthropic.com/pricing
+* **OpenAI**: https://openai.com/pricing
+* **Google AI**: https://ai.google.dev/pricing
 
 = Will this work with my theme? =
 
@@ -81,7 +92,7 @@ Yes! The plugin backs up your original content and title in post meta fields bef
 
 = Does this work with Gutenberg? =
 
-Yes, the plugin works with both the Classic Editor and Gutenberg (Block Editor).
+Yes, the plugin works with both the Classic Editor and Gutenberg (Block Editor). Images and galleries are created using WordPress block format.
 
 == Screenshots ==
 
@@ -90,17 +101,20 @@ Yes, the plugin works with both the Classic Editor and Gutenberg (Block Editor).
 3. Manual Processing interface
 4. Dashboard Widget
 5. Posts list with processing status
-6. Historical enrichment example
+6. Historical enrichment example with related content
 
 == Changelog ==
 
 = 1.0.0 =
 * Initial release
+* Multi-provider support (Claude, OpenAI, Google AI)
 * Grammar and spelling correction
-* Title generation
+* Natural, conversational title generation
 * Tag and category generation
-* Historical enrichment
+* Historical enrichment with RAG-type analysis
+* Related content links and references
 * Media handling (photos, PDFs, videos)
+* WordPress block format support
 * Auto and manual processing
 * Comprehensive logging
 * Email notifications
@@ -109,18 +123,21 @@ Yes, the plugin works with both the Classic Editor and Gutenberg (Block Editor).
 == Upgrade Notice ==
 
 = 1.0.0 =
-Initial release of Claude Post Processor.
+Initial release of AI Post Processor with multi-provider support.
 
 == Privacy Policy ==
 
-This plugin sends your post content to the Anthropic API for processing. Please review Anthropic's privacy policy at https://www.anthropic.com/privacy
+This plugin sends your post content to your selected AI provider's API for processing. Please review the privacy policies:
+* Anthropic: https://www.anthropic.com/privacy
+* OpenAI: https://openai.com/policies/privacy-policy
+* Google: https://policies.google.com/privacy
 
 The plugin stores:
 * Encrypted API keys in your WordPress database
 * Processing logs in wp-content/uploads/claude-processor-logs/
 * Post metadata about processing status
 
-No data is sent to any third party except Anthropic's API.
+No data is sent to any third party except your selected AI provider's API.
 
 == Support ==
 

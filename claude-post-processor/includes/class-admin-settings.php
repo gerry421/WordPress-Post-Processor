@@ -45,8 +45,8 @@ class Admin_Settings {
 	 */
 	public function add_settings_page() {
 		add_options_page(
-			__( 'Claude Post Processor', 'claude-post-processor' ),
-			__( 'Claude Post Processor', 'claude-post-processor' ),
+			__( 'AI Post Processor', 'claude-post-processor' ),
+			__( 'AI Post Processor', 'claude-post-processor' ),
 			'manage_options',
 			'claude-post-processor',
 			array( $this, 'render_settings_page' )
@@ -861,7 +861,7 @@ class Admin_Settings {
 	public function add_dashboard_widget() {
 		wp_add_dashboard_widget(
 			'claude_post_processor_widget',
-			__( 'Claude Post Processor', 'claude-post-processor' ),
+			__( 'AI Post Processor', 'claude-post-processor' ),
 			array( $this, 'render_dashboard_widget' )
 		);
 	}

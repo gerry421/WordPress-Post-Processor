@@ -1,5 +1,5 @@
 /**
- * Claude Post Processor Admin Scripts
+ * AI Post Processor Admin Scripts
  */
 (function($) {
     'use strict';

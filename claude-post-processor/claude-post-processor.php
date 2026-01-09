@@ -1,8 +1,8 @@
 <?php
 /**
- * Plugin Name: Claude Post Processor
+ * Plugin Name: AI Post Processor
  * Plugin URI: https://github.com/gerry421/WordPress-Post-Processor
- * Description: Automatically or manually processes posts using the Anthropic Claude API to enhance posts with AI-generated improvements, proper media handling, and historical enrichment.
+ * Description: Automatically or manually processes posts using AI (Anthropic Claude, OpenAI, or Google Gemini) to enhance posts with AI-generated improvements, proper media handling, and historical enrichment.
  * Version: 1.0.0
  * Author: Your Name
  * Author URI: https://github.com/gerry421

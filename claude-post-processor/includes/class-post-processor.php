@@ -25,6 +25,13 @@ class Post_Processor {
 	const MIN_ENRICHMENT_LENGTH = 20;
 
 	/**
+	 * Common words to exclude from keyword extraction.
+	 *
+	 * @var array
+	 */
+	const COMMON_WORDS = array( 'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'from', 'is', 'was', 'are', 'were', 'been', 'be', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'can', 'this', 'that', 'these', 'those' );
+
+	/**
 	 * Claude API handler.
 	 *
 	 * @var AI_Provider
@@ -191,8 +198,8 @@ class Post_Processor {
 		// Step 5: Historical enrichment (if enabled)
 		$enrichment = '';
 		if ( get_option( 'claude_post_processor_include_historical', true ) ) {
-			$processing_log[] = 'Starting historical enrichment';
-			$enrichment = $this->generate_historical_enrichment( $content );
+			$processing_log[] = 'Starting historical enrichment with RAG analysis';
+			$enrichment = $this->generate_historical_enrichment( $content, $post_id );
 			if ( ! is_wp_error( $enrichment ) && ! empty( $enrichment ) ) {
 				$processing_log[] = 'Historical enrichment completed';
 			} else {
@@ -280,10 +287,12 @@ class Post_Processor {
 	 * @return string|WP_Error The generated title or WP_Error on failure.
 	 */
 	private function generate_title( $content ) {
-		$prompt = "Based on the following narrative, generate a compelling, SEO-friendly title that captures the essence of the content. The title should be:\n";
-		$prompt .= "- Between 40-60 characters\n";
-		$prompt .= "- Engaging and descriptive\n";
-		$prompt .= "- Not clickbait\n\n";
+		$prompt = "Based on the following narrative, create a natural, conversational title that captures what the story is about. The title should:\n";
+		$prompt .= "- Sound like something a person would naturally say\n";
+		$prompt .= "- Be casual and friendly, not overly formal or corporate\n";
+		$prompt .= "- Be between 40-60 characters for readability\n";
+		$prompt .= "- Feel authentic and genuine, not like marketing copy\n";
+		$prompt .= "- Avoid formal phrases like 'A Journey Through' or 'An Exploration of'\n\n";
 		$prompt .= "Return only the title, no quotes or additional text.\n\n";
 		$prompt .= "Narrative:\n" . $content;
 
@@ -362,29 +371,105 @@ class Post_Processor {
 	}
 
 	/**
+	 * Get related posts for RAG-type analysis.
+	 *
+	 * @param string $content The post content.
+	 * @param int    $post_id The current post ID to exclude.
+	 * @param int    $limit Maximum number of related posts to return.
+	 * @return array Array of related post data.
+	 */
+	private function get_related_posts( $content, $post_id, $limit = 5 ) {
+		// Extract key terms from content
+		$words = str_word_count( strtolower( strip_tags( $content ) ), 1 );
+		$words = array_diff( $words, self::COMMON_WORDS );
+		
+		// Get word frequency
+		$word_freq = array_count_values( $words );
+		arsort( $word_freq );
+		$top_words = array_slice( array_keys( $word_freq ), 0, 10 );
+		
+		// Search for posts with similar content
+		$args = array(
+			'post_type'      => 'post',
+			'post_status'    => 'publish',
+			'posts_per_page' => $limit,
+			'post__not_in'   => array( $post_id ),
+			's'              => implode( ' ', array_slice( $top_words, 0, 3 ) ),
+			'orderby'        => 'relevance',
+		);
+		
+		$related_posts = get_posts( $args );
+		$related_data = array();
+		
+		foreach ( $related_posts as $post ) {
+			$categories = get_the_category( $post->ID );
+			$category_names = array();
+			if ( ! empty( $categories ) && ! is_wp_error( $categories ) ) {
+				$category_names = wp_list_pluck( $categories, 'name' );
+			}
+			
+			$related_data[] = array(
+				'title' => $post->post_title,
+				'url'   => get_permalink( $post->ID ),
+				'excerpt' => wp_trim_words( $post->post_content, 30 ),
+				'tags'  => wp_get_post_tags( $post->ID, array( 'fields' => 'names' ) ),
+				'categories' => $category_names,
+			);
+		}
+		
+		return $related_data;
+	}
+
+	/**
 	 * Generate historical enrichment for the content.
 	 *
 	 * @param string $content The content.
+	 * @param int    $post_id The post ID.
 	 * @return string|WP_Error Historical enrichment HTML or WP_Error on failure.
 	 */
-	private function generate_historical_enrichment( $content ) {
+	private function generate_historical_enrichment( $content, $post_id = 0 ) {
+		// Get related posts for RAG-type context
+		$related_posts = $this->get_related_posts( $content, $post_id );
+		
 		$prompt = "Analyze the following narrative and identify SPECIFIC places, landmarks, or historical sites mentioned.\n\n";
 		$prompt .= "IMPORTANT QUALITY GUIDELINES:\n";
 		$prompt .= "- Only include SPECIFIC, named locations (e.g., 'Eiffel Tower', 'Golden Gate Bridge', 'Notre-Dame Cathedral')\n";
 		$prompt .= "- DO NOT include generic references (e.g., 'the park', 'home', 'a restaurant', 'the beach')\n";
 		$prompt .= "- Only include locations that are CENTRAL to the narrative\n";
 		$prompt .= "- If NO specific places are found, return exactly: NO_PLACES_FOUND\n\n";
+		
+		// Add related posts context if available
+		if ( ! empty( $related_posts ) ) {
+			$prompt .= "RELATED CONTENT FROM OTHER POSTS (use this to enrich your response):\n";
+			foreach ( $related_posts as $related ) {
+				$prompt .= "- Post: \"{$related['title']}\" (URL: {$related['url']})\n";
+				$prompt .= "  Excerpt: {$related['excerpt']}\n";
+				if ( ! empty( $related['tags'] ) ) {
+					$prompt .= "  Tags: " . implode( ', ', $related['tags'] ) . "\n";
+				}
+				if ( ! empty( $related['categories'] ) ) {
+					$prompt .= "  Categories: " . implode( ', ', $related['categories'] ) . "\n";
+				}
+			}
+			$prompt .= "\n";
+		}
+		
 		$prompt .= "For each SPECIFIC location found, provide:\n";
 		$prompt .= "- Historical context (2-3 sentences) with SPECIFIC dates and events\n";
 		$prompt .= "- One interesting, LESSER-KNOWN fact (avoid obvious information)\n";
+		$prompt .= "- Links to related posts when relevant (use the related content URLs provided above)\n";
+		$prompt .= "- Relevant tags and categories from related posts that connect to this narrative\n";
 		$prompt .= "- Focus on substantive historical information, not trivial details\n\n";
 		$prompt .= "Format the response as a WordPress quote block with the following EXACT structure:\n\n";
 		$prompt .= "<!-- wp:quote -->\n";
 		$prompt .= "<blockquote class=\"wp-block-quote\">\n";
-		$prompt .= "  <p><strong>📍 Historical Context</strong></p>\n";
+		$prompt .= "  <p><strong>📍 Historical Context & Related Content</strong></p>\n";
 		$prompt .= "  <p><strong>[Location Name]</strong><br>\n";
 		$prompt .= "  [Historical context in 2-3 sentences. Include specific dates and events.]</p>\n";
 		$prompt .= "  <p><em>Did you know?</em> [Interesting lesser-known fact]</p>\n";
+		if ( ! empty( $related_posts ) ) {
+			$prompt .= "  <p><em>Related:</em> [Add links to relevant posts using format: <a href=\"URL\">Post Title</a>. Mention relevant tags/categories.]</p>\n";
+		}
 		$prompt .= "  <!-- Repeat for additional locations -->\n";
 		$prompt .= "</blockquote>\n";
 		$prompt .= "<!-- /wp:quote -->\n\n";
@@ -462,7 +547,7 @@ class Post_Processor {
 
 		$message = sprintf(
 			/* translators: 1: Post title, 2: Edit post URL */
-			__( 'The post "%1$s" has been processed with Claude AI and is now in draft status.\n\nView and edit: %2$s', 'claude-post-processor' ),
+			__( 'The post "%1$s" has been processed with AI and is now in draft status.\n\nView and edit: %2$s', 'claude-post-processor' ),
 			$post->post_title,
 			get_edit_post_link( $post_id, 'raw' )
 		);
@@ -477,8 +562,8 @@ class Post_Processor {
 	 * @return array Modified actions.
 	 */
 	public function add_bulk_action( $actions ) {
-		$actions['claude_process'] = __( 'Process with Claude', 'claude-post-processor' );
-		$actions['claude_reprocess'] = __( 'Reprocess with Claude', 'claude-post-processor' );
+		$actions['claude_process'] = __( 'Process with AI', 'claude-post-processor' );
+		$actions['claude_reprocess'] = __( 'Reprocess with AI', 'claude-post-processor' );
 		return $actions;
 	}
 
@@ -540,14 +625,14 @@ class Post_Processor {
 					admin_url( 'admin.php?action=claude_reprocess_post&post=' . $post->ID ),
 					'claude_reprocess_post_' . $post->ID
 				);
-				$actions['claude_reprocess'] = '<a href="' . esc_url( $url ) . '">' . __( 'Reprocess with Claude', 'claude-post-processor' ) . '</a>';
+				$actions['claude_reprocess'] = '<a href="' . esc_url( $url ) . '">' . __( 'Reprocess with AI', 'claude-post-processor' ) . '</a>';
 			} else {
 				// Show "Process" for unprocessed posts
 				$url = wp_nonce_url(
 					admin_url( 'admin.php?action=claude_process_post&post=' . $post->ID ),
 					'claude_process_post_' . $post->ID
 				);
-				$actions['claude_process'] = '<a href="' . esc_url( $url ) . '">' . __( 'Process with Claude', 'claude-post-processor' ) . '</a>';
+				$actions['claude_process'] = '<a href="' . esc_url( $url ) . '">' . __( 'Process with AI', 'claude-post-processor' ) . '</a>';
 			}
 		}
 		return $actions;
@@ -627,7 +712,7 @@ class Post_Processor {
 	 * @return array Modified columns.
 	 */
 	public function add_custom_column( $columns ) {
-		$columns['claude_status'] = __( 'Claude Status', 'claude-post-processor' );
+		$columns['claude_status'] = __( 'AI Status', 'claude-post-processor' );
 		return $columns;
 	}
 
