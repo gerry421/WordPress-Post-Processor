@@ -535,7 +535,7 @@ class Post_Processor {
 
 		$message = sprintf(
 			/* translators: 1: Post title, 2: Edit post URL */
-			__( 'The post "%1$s" has been processed with Claude AI and is now in draft status.\n\nView and edit: %2$s', 'claude-post-processor' ),
+			__( 'The post "%1$s" has been processed with AI and is now in draft status.\n\nView and edit: %2$s', 'claude-post-processor' ),
 			$post->post_title,
 			get_edit_post_link( $post_id, 'raw' )
 		);
@@ -550,8 +550,8 @@ class Post_Processor {
 	 * @return array Modified actions.
 	 */
 	public function add_bulk_action( $actions ) {
-		$actions['claude_process'] = __( 'Process with Claude', 'claude-post-processor' );
-		$actions['claude_reprocess'] = __( 'Reprocess with Claude', 'claude-post-processor' );
+		$actions['claude_process'] = __( 'Process with AI', 'claude-post-processor' );
+		$actions['claude_reprocess'] = __( 'Reprocess with AI', 'claude-post-processor' );
 		return $actions;
 	}
 
@@ -613,14 +613,14 @@ class Post_Processor {
 					admin_url( 'admin.php?action=claude_reprocess_post&post=' . $post->ID ),
 					'claude_reprocess_post_' . $post->ID
 				);
-				$actions['claude_reprocess'] = '<a href="' . esc_url( $url ) . '">' . __( 'Reprocess with Claude', 'claude-post-processor' ) . '</a>';
+				$actions['claude_reprocess'] = '<a href="' . esc_url( $url ) . '">' . __( 'Reprocess with AI', 'claude-post-processor' ) . '</a>';
 			} else {
 				// Show "Process" for unprocessed posts
 				$url = wp_nonce_url(
 					admin_url( 'admin.php?action=claude_process_post&post=' . $post->ID ),
 					'claude_process_post_' . $post->ID
 				);
-				$actions['claude_process'] = '<a href="' . esc_url( $url ) . '">' . __( 'Process with Claude', 'claude-post-processor' ) . '</a>';
+				$actions['claude_process'] = '<a href="' . esc_url( $url ) . '">' . __( 'Process with AI', 'claude-post-processor' ) . '</a>';
 			}
 		}
 		return $actions;
@@ -700,7 +700,7 @@ class Post_Processor {
 	 * @return array Modified columns.
 	 */
 	public function add_custom_column( $columns ) {
-		$columns['claude_status'] = __( 'Claude Status', 'claude-post-processor' );
+		$columns['claude_status'] = __( 'AI Status', 'claude-post-processor' );
 		return $columns;
 	}
 

@@ -1,8 +1,8 @@
-# Claude Post Processor - Features Overview
+# AI Post Processor - Features Overview
 
 ## Overview
 
-Claude Post Processor is a comprehensive WordPress plugin that leverages Anthropic's Claude AI to automatically enhance blog posts with intelligent improvements, proper media formatting, and enriched historical context.
+AI Post Processor is a comprehensive WordPress plugin that leverages multiple AI providers (Anthropic Claude, OpenAI, Google Gemini) to automatically enhance blog posts with intelligent improvements, proper media formatting, and enriched historical context.
 
 ## Core Features
 

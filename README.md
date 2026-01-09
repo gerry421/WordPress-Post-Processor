@@ -22,7 +22,7 @@ A powerful WordPress plugin that automatically or manually processes posts using
 1. Clone this repository or download the ZIP file
 2. Copy the `claude-post-processor` directory to your WordPress `wp-content/plugins/` directory
 3. Activate the plugin through the WordPress admin panel
-4. Go to Settings > Claude Post Processor
+4. Go to Settings > AI Post Processor
 5. Select your preferred AI provider (Claude, OpenAI, or Google AI)
 6. Enter your API key for the selected provider:
    - **Anthropic Claude**: Get key at https://console.anthropic.com/
@@ -34,7 +34,7 @@ A powerful WordPress plugin that automatically or manually processes posts using
 
 ### Manual Processing
 
-1. Go to Settings > Claude Post Processor > Manual Processing
+1. Go to Settings > AI Post Processor > Manual Processing
 2. Select posts to process
 3. Click "Process Selected" or "Process All Unprocessed"
 
@@ -53,7 +53,7 @@ A powerful WordPress plugin that automatically or manually processes posts using
 
 ### Auto-Processing
 
-1. Go to Settings > Claude Post Processor > Processing Options
+1. Go to Settings > AI Post Processor > Processing Options
 2. Enable "Auto-process New Posts"
 3. New posts will be processed automatically when created
 
