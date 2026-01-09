@@ -51,17 +51,24 @@ class Media_Handler {
 		// Get all attached images
 		$attachments = get_attached_media( 'image', $post_id );
 		
-		if ( empty( $attachments ) ) {
+		// Also extract any images referenced in simple img tags
+		$img_ids_from_content = $this->extract_image_ids_from_tags( $content );
+		
+		if ( empty( $attachments ) && empty( $img_ids_from_content ) ) {
 			return $content;
 		}
 
-		// Get image IDs that are not already in the content
-		$attachment_ids = array_keys( $attachments );
+		// Combine attached images with images found in content
+		$all_image_ids = array_keys( $attachments );
+		$all_image_ids = array_merge( $all_image_ids, $img_ids_from_content );
+		$all_image_ids = array_unique( $all_image_ids );
+		
+		// Get image IDs that are not already in WordPress blocks
 		$used_ids = $this->get_images_in_content( $content );
-		$new_attachment_ids = array_diff( $attachment_ids, $used_ids );
+		$new_attachment_ids = array_diff( $all_image_ids, $used_ids );
 
 		if ( empty( $new_attachment_ids ) ) {
-			// All images are already in content
+			// All images are already in proper block format
 			return $content;
 		}
 
@@ -69,6 +76,7 @@ class Media_Handler {
 
 		// Remove standalone image tags (not in blocks) from content
 		$content = preg_replace( '/<img[^>]+>/i', '', $content );
+		$content = trim( $content );
 
 		if ( 1 === $image_count ) {
 			// Single image - display as WordPress block image
@@ -92,6 +100,34 @@ class Media_Handler {
 	 */
 	private function has_wordpress_blocks( $content ) {
 		return preg_match( '/<!-- wp:(gallery|image|media-text|columns|group)/', $content ) > 0;
+	}
+
+	/**
+	 * Extract image attachment IDs from img tags in content.
+	 *
+	 * @param string $content The post content.
+	 * @return array Array of attachment IDs found in img tags.
+	 */
+	private function extract_image_ids_from_tags( $content ) {
+		$ids = array();
+		
+		// Match img tags with wp-image-ID class
+		if ( preg_match_all( '/wp-image-(\d+)/', $content, $matches ) ) {
+			$ids = array_merge( $ids, $matches[1] );
+		}
+		
+		// Match img tags with attachment_ID in src
+		if ( preg_match_all( '/wp-content\/uploads\/[^"]+\.(?:jpg|jpeg|png|gif|webp)/i', $content, $matches ) ) {
+			foreach ( $matches[0] as $url ) {
+				// Try to get attachment ID from URL
+				$attachment_id = attachment_url_to_postid( $url );
+				if ( $attachment_id ) {
+					$ids[] = $attachment_id;
+				}
+			}
+		}
+		
+		return array_unique( array_map( 'intval', array_filter( $ids ) ) );
 	}
 
 	/**
