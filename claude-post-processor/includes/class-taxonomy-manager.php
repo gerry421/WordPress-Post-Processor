@@ -33,13 +33,42 @@ class Taxonomy_Manager {
 		$tags = array_map( 'trim', explode( ',', $tags_csv ) );
 		$tags = array_filter( $tags ); // Remove empty values
 
+		// Match existing tags case-insensitively
+		$matched_tags = array();
+		foreach ( $tags as $tag_name ) {
+			$matched_tag = $this->find_existing_tag( $tag_name );
+			if ( $matched_tag ) {
+				$matched_tags[] = $matched_tag;
+			} else {
+				$matched_tags[] = $tag_name;
+			}
+		}
+
 		// Set tags on the post
-		wp_set_post_tags( $post_id, $tags, false );
+		wp_set_post_tags( $post_id, $matched_tags, false );
 
 		// Store which tags were auto-generated
-		update_post_meta( $post_id, '_claude_generated_tags', $tags );
+		update_post_meta( $post_id, '_claude_generated_tags', $matched_tags );
 
-		return $tags;
+		return $matched_tags;
+	}
+
+	/**
+	 * Find an existing tag by name (case-insensitive).
+	 *
+	 * @param string $tag_name The tag name to search for.
+	 * @return string|false The matched tag name or false if not found.
+	 */
+	private function find_existing_tag( $tag_name ) {
+		$all_tags = get_tags( array( 'hide_empty' => false ) );
+		
+		foreach ( $all_tags as $tag ) {
+			if ( strcasecmp( $tag->name, $tag_name ) === 0 ) {
+				return $tag->name;
+			}
+		}
+		
+		return false;
 	}
 
 	/**
@@ -92,8 +121,8 @@ class Taxonomy_Manager {
 			return $this->create_hierarchical_category( $category_path );
 		}
 
-		// Simple category - check if it exists
-		$term = get_term_by( 'name', $category_path, 'category' );
+		// Simple category - check if it exists (case-insensitive)
+		$term = $this->find_existing_category( $category_path );
 		
 		if ( $term ) {
 			return $term->term_id;
@@ -110,6 +139,29 @@ class Taxonomy_Manager {
 	}
 
 	/**
+	 * Find an existing category by name (case-insensitive).
+	 *
+	 * @param string $category_name The category name to search for.
+	 * @param int    $parent_id Optional parent ID to match.
+	 * @return WP_Term|false The matched category term or false if not found.
+	 */
+	private function find_existing_category( $category_name, $parent_id = 0 ) {
+		$all_categories = get_categories( array( 'hide_empty' => false ) );
+		
+		foreach ( $all_categories as $category ) {
+			if ( strcasecmp( $category->name, $category_name ) === 0 ) {
+				// If parent_id is specified, check if it matches
+				if ( $parent_id > 0 && $category->parent !== $parent_id ) {
+					continue;
+				}
+				return $category;
+			}
+		}
+		
+		return false;
+	}
+
+	/**
 	 * Create hierarchical categories.
 	 *
 	 * @param string $category_path Hierarchical category path.
@@ -121,7 +173,8 @@ class Taxonomy_Manager {
 		$parent_id = 0;
 
 		foreach ( $levels as $level ) {
-			$term = get_term_by( 'name', $level, 'category' );
+			// Try to find existing category with this name and parent (case-insensitive)
+			$term = $this->find_existing_category( $level, $parent_id );
 			
 			if ( $term && $term->parent === $parent_id ) {
 				// Category exists with correct parent
@@ -136,7 +189,7 @@ class Taxonomy_Manager {
 				
 				if ( is_wp_error( $result ) ) {
 					// If category exists but with different parent, try to find it
-					$existing = get_term_by( 'name', $level, 'category' );
+					$existing = $this->find_existing_category( $level );
 					if ( $existing ) {
 						$parent_id = $existing->term_id;
 					} else {
@@ -179,5 +232,28 @@ class Taxonomy_Manager {
 				'hide_empty' => false,
 			)
 		);
+	}
+
+	/**
+	 * Get the full hierarchical path of a category.
+	 *
+	 * @param WP_Term $category The category term object.
+	 * @return string The hierarchical path (e.g., "Travel > Europe > France").
+	 */
+	public function get_category_path( $category ) {
+		$path_parts = array( $category->name );
+		$parent_id = $category->parent;
+		
+		// Walk up the hierarchy
+		while ( $parent_id > 0 ) {
+			$parent = get_category( $parent_id );
+			if ( ! $parent || is_wp_error( $parent ) ) {
+				break;
+			}
+			array_unshift( $path_parts, $parent->name );
+			$parent_id = $parent->parent;
+		}
+		
+		return implode( ' > ', $path_parts );
 	}
 }
