@@ -18,6 +18,13 @@ if ( ! defined( 'WPINC' ) ) {
 class Taxonomy_Manager {
 
 	/**
+	 * Cached categories list for performance optimization.
+	 *
+	 * @var array|null
+	 */
+	private $cached_categories = null;
+
+	/**
 	 * Process and assign tags to a post.
 	 *
 	 * @param int    $post_id The post ID.
@@ -33,10 +40,13 @@ class Taxonomy_Manager {
 		$tags = array_map( 'trim', explode( ',', $tags_csv ) );
 		$tags = array_filter( $tags ); // Remove empty values
 
+		// Cache all existing tags once to avoid multiple queries
+		$all_tags = get_tags( array( 'hide_empty' => false ) );
+
 		// Match existing tags case-insensitively
 		$matched_tags = array();
 		foreach ( $tags as $tag_name ) {
-			$matched_tag = $this->find_existing_tag( $tag_name );
+			$matched_tag = $this->find_existing_tag_in_list( $tag_name, $all_tags );
 			if ( $matched_tag ) {
 				$matched_tags[] = $matched_tag;
 			} else {
@@ -54,15 +64,14 @@ class Taxonomy_Manager {
 	}
 
 	/**
-	 * Find an existing tag by name (case-insensitive).
+	 * Find an existing tag by name in a list (case-insensitive).
 	 *
 	 * @param string $tag_name The tag name to search for.
+	 * @param array  $tag_list Array of tag objects to search in.
 	 * @return string|false The matched tag name or false if not found.
 	 */
-	private function find_existing_tag( $tag_name ) {
-		$all_tags = get_tags( array( 'hide_empty' => false ) );
-		
-		foreach ( $all_tags as $tag ) {
+	private function find_existing_tag_in_list( $tag_name, $tag_list ) {
+		foreach ( $tag_list as $tag ) {
 			if ( strcasecmp( $tag->name, $tag_name ) === 0 ) {
 				return $tag->name;
 			}
@@ -87,6 +96,9 @@ class Taxonomy_Manager {
 		$categories = array_map( 'trim', explode( ',', $categories_csv ) );
 		$categories = array_filter( $categories ); // Remove empty values
 
+		// Cache all existing categories once to avoid multiple queries
+		$this->cached_categories = get_categories( array( 'hide_empty' => false ) );
+
 		$category_ids = array();
 		$generated_categories = array();
 
@@ -97,6 +109,9 @@ class Taxonomy_Manager {
 				$generated_categories[] = $category_path;
 			}
 		}
+
+		// Clear cache after processing
+		$this->cached_categories = null;
 
 		// Assign categories to post
 		if ( ! empty( $category_ids ) ) {
@@ -146,7 +161,8 @@ class Taxonomy_Manager {
 	 * @return WP_Term|false The matched category term or false if not found.
 	 */
 	private function find_existing_category( $category_name, $parent_id = 0 ) {
-		$all_categories = get_categories( array( 'hide_empty' => false ) );
+		// Use cached categories if available, otherwise fetch
+		$all_categories = $this->cached_categories ?? get_categories( array( 'hide_empty' => false ) );
 		
 		foreach ( $all_categories as $category ) {
 			if ( strcasecmp( $category->name, $category_name ) === 0 ) {

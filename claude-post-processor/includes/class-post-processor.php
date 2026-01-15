@@ -439,6 +439,8 @@ class Post_Processor {
 		// Search for posts with similar content using multiple search terms
 		$search_query = implode( ' ', array_slice( $top_words, 0, 5 ) );
 		
+		// Include both published and draft posts to find connections
+		// even with content that hasn't been published yet
 		$args = array(
 			'post_type'      => 'post',
 			'post_status'    => array( 'publish', 'draft' ),
@@ -453,7 +455,9 @@ class Post_Processor {
 		
 		foreach ( $related_posts as $post ) {
 			// Calculate relevance score based on shared keywords
-			$post_words = str_word_count( strtolower( strip_tags( $post->post_content ) ), 1 );
+			// Limit content length to improve performance
+			$post_content_sample = substr( strip_tags( $post->post_content ), 0, 5000 );
+			$post_words = str_word_count( strtolower( $post_content_sample ), 1 );
 			$post_words = array_diff( $post_words, self::COMMON_WORDS );
 			$shared_words = array_intersect( $top_words, $post_words );
 			$relevance_score = count( $shared_words );
