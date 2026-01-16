@@ -170,26 +170,43 @@ class Post_Processor {
 		sleep( 2 );
 
 		// Step 3: Tag generation
-		$processing_log[] = 'Starting tag generation';
-		$tags = $this->generate_tags( $content );
-		if ( ! is_wp_error( $tags ) && ! empty( $tags ) ) {
-			$this->taxonomy->process_tags( $post_id, $tags );
-			$processing_log[] = 'Tags generated and assigned';
+		// Check if post already has tags - if so, preserve them
+		$existing_tags = wp_get_post_tags( $post_id, array( 'fields' => 'names' ) );
+		if ( ! empty( $existing_tags ) ) {
+			$processing_log[] = 'Post already has tags - preserving existing tags';
 		} else {
-			$processing_log[] = 'Tag generation failed or returned empty';
+			$processing_log[] = 'Starting tag generation';
+			$tags = $this->generate_tags( $content );
+			if ( ! is_wp_error( $tags ) && ! empty( $tags ) ) {
+				$this->taxonomy->process_tags( $post_id, $tags );
+				$processing_log[] = 'Tags generated and assigned';
+			} else {
+				$processing_log[] = 'Tag generation failed or returned empty';
+			}
+			// Add delay between API calls
+			sleep( 2 );
 		}
 
-		// Add delay between API calls
-		sleep( 2 );
-
 		// Step 4: Category generation
-		$processing_log[] = 'Starting category generation';
-		$categories = $this->generate_categories( $content );
-		if ( ! is_wp_error( $categories ) && ! empty( $categories ) ) {
-			$this->taxonomy->process_categories( $post_id, $categories );
-			$processing_log[] = 'Categories generated and assigned';
+		// Check if post already has categories (besides 'Uncategorized') - if so, preserve them
+		$existing_categories = wp_get_post_categories( $post_id, array( 'fields' => 'names' ) );
+		// Filter out 'Uncategorized' as it's the default WordPress category
+		$existing_categories = array_filter( $existing_categories, function( $cat ) {
+			return strcasecmp( $cat, 'Uncategorized' ) !== 0;
+		} );
+		if ( ! empty( $existing_categories ) ) {
+			$processing_log[] = 'Post already has categories - preserving existing categories';
 		} else {
-			$processing_log[] = 'Category generation failed or returned empty';
+			$processing_log[] = 'Starting category generation';
+			$categories = $this->generate_categories( $content );
+			if ( ! is_wp_error( $categories ) && ! empty( $categories ) ) {
+				$this->taxonomy->process_categories( $post_id, $categories );
+				$processing_log[] = 'Categories generated and assigned';
+			} else {
+				$processing_log[] = 'Category generation failed or returned empty';
+			}
+			// Add delay between API calls
+			sleep( 2 );
 		}
 
 		// Add delay between API calls
@@ -265,7 +282,8 @@ class Post_Processor {
 		$prompt .= "Preserve the original voice and style. Return only the corrected text without explanations.\n\n";
 		$prompt .= "Text to review:\n" . $content;
 
-		$response = $this->api->send_message( $prompt );
+		// Use 8192 max_tokens to handle longer posts without truncation
+		$response = $this->api->send_message( $prompt, 8192 );
 		
 		if ( is_wp_error( $response ) ) {
 			return $response;
