@@ -172,18 +172,20 @@ class Post_Processor {
 		// Step 3: Tag generation
 		// Check if post already has tags - if so, preserve them
 		$existing_tags = wp_get_post_tags( $post_id, array( 'fields' => 'names' ) );
+		$made_tag_api_call = false;
 		if ( ! empty( $existing_tags ) ) {
 			$processing_log[] = 'Post already has tags - preserving existing tags';
 		} else {
 			$processing_log[] = 'Starting tag generation';
 			$tags = $this->generate_tags( $content );
+			$made_tag_api_call = true;
 			if ( ! is_wp_error( $tags ) && ! empty( $tags ) ) {
 				$this->taxonomy->process_tags( $post_id, $tags );
 				$processing_log[] = 'Tags generated and assigned';
 			} else {
 				$processing_log[] = 'Tag generation failed or returned empty';
 			}
-			// Add delay between API calls
+			// Add delay after API call
 			sleep( 2 );
 		}
 
@@ -194,23 +196,27 @@ class Post_Processor {
 		$existing_categories = array_filter( $existing_categories, function( $cat ) {
 			return strcasecmp( $cat, 'Uncategorized' ) !== 0;
 		} );
+		$made_category_api_call = false;
 		if ( ! empty( $existing_categories ) ) {
 			$processing_log[] = 'Post already has categories - preserving existing categories';
 		} else {
 			$processing_log[] = 'Starting category generation';
 			$categories = $this->generate_categories( $content );
+			$made_category_api_call = true;
 			if ( ! is_wp_error( $categories ) && ! empty( $categories ) ) {
 				$this->taxonomy->process_categories( $post_id, $categories );
 				$processing_log[] = 'Categories generated and assigned';
 			} else {
 				$processing_log[] = 'Category generation failed or returned empty';
 			}
-			// Add delay between API calls
+			// Add delay after API call
 			sleep( 2 );
 		}
 
-		// Add delay between API calls
-		sleep( 2 );
+		// Add delay before historical enrichment only if we haven't already delayed
+		if ( ! $made_tag_api_call && ! $made_category_api_call ) {
+			sleep( 2 );
+		}
 
 		// Step 5: Historical enrichment (if enabled)
 		$enrichment = '';
