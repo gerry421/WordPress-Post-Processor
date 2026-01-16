@@ -318,12 +318,34 @@ class Post_Processor {
 	 * @return string|WP_Error Comma-separated tags or WP_Error on failure.
 	 */
 	private function generate_tags( $content ) {
-		$prompt = "Analyze the following narrative and generate 5-10 relevant tags.\n";
+		// Get all existing tags
+		$existing_tags = $this->taxonomy->get_all_tags();
+		$tag_list = array();
+		
+		if ( ! empty( $existing_tags ) ) {
+			foreach ( $existing_tags as $tag ) {
+				$tag_list[] = $tag->name;
+			}
+		}
+		
+		$prompt = "Analyze the following narrative and generate 5-10 relevant tags.\n\n";
+		
+		// Include existing tags if available
+		if ( ! empty( $tag_list ) ) {
+			$prompt .= "EXISTING TAGS (prefer these if they match the content):\n";
+			$prompt .= implode( ', ', $tag_list ) . "\n\n";
+			$prompt .= "IMPORTANT: Review the existing tags carefully and use them when they are relevant to the narrative. Only create NEW tags if none of the existing tags adequately describe the content.\n\n";
+		}
+		
 		$prompt .= "Tags should be:\n";
 		$prompt .= "- Single words or short phrases (2-3 words max)\n";
 		$prompt .= "- Relevant to the main topics, themes, people, and places mentioned\n";
-		$prompt .= "- A mix of specific and general terms for SEO\n\n";
-		$prompt .= "Return as a comma-separated list only.\n\n";
+		$prompt .= "- A mix of specific and general terms for SEO\n";
+		if ( ! empty( $tag_list ) ) {
+			$prompt .= "- Preferably selected from the existing tags list when appropriate\n";
+			$prompt .= "- Only new tags when existing ones don't match the narrative\n";
+		}
+		$prompt .= "\nReturn as a comma-separated list only.\n\n";
 		$prompt .= "Narrative:\n" . $content;
 
 		$response = $this->api->send_message( $prompt, 200 );
@@ -348,11 +370,37 @@ class Post_Processor {
 	 * @return string|WP_Error Comma-separated categories or WP_Error on failure.
 	 */
 	private function generate_categories( $content ) {
-		$prompt = "Analyze the following narrative and suggest 1-3 appropriate categories.\n";
+		// Get all existing categories with hierarchy
+		$existing_categories = $this->taxonomy->get_all_categories();
+		$category_list = array();
+		
+		if ( ! empty( $existing_categories ) ) {
+			foreach ( $existing_categories as $category ) {
+				// Build hierarchical path
+				$path = $this->taxonomy->get_category_path( $category );
+				$category_list[] = $path;
+			}
+			// Remove duplicates (parent categories will appear multiple times)
+			$category_list = array_unique( $category_list );
+		}
+		
+		$prompt = "Analyze the following narrative and suggest 1-3 appropriate categories.\n\n";
+		
+		// Include existing categories if available
+		if ( ! empty( $category_list ) ) {
+			$prompt .= "EXISTING CATEGORIES (prefer these if they match the content):\n";
+			$prompt .= implode( "\n", $category_list ) . "\n\n";
+			$prompt .= "IMPORTANT: Review the existing categories carefully and use them when they are relevant to the narrative. Only create NEW categories if none of the existing categories adequately describe the content.\n\n";
+		}
+		
 		$prompt .= "Categories should be:\n";
 		$prompt .= "- Broad topic areas that could apply to multiple posts\n";
-		$prompt .= "- Hierarchical if appropriate (e.g., \"Travel > Europe > France\")\n\n";
-		$prompt .= "Return as a comma-separated list. Use \" > \" for hierarchy.\n\n";
+		$prompt .= "- Hierarchical if appropriate (e.g., \"Travel > Europe > France\")\n";
+		if ( ! empty( $category_list ) ) {
+			$prompt .= "- Preferably selected from the existing categories list when appropriate\n";
+			$prompt .= "- Only new categories when existing ones don't match the narrative\n";
+		}
+		$prompt .= "\nReturn as a comma-separated list. Use \" > \" for hierarchy.\n\n";
 		$prompt .= "Narrative:\n" . $content;
 
 		$response = $this->api->send_message( $prompt, 200 );
@@ -388,13 +436,17 @@ class Post_Processor {
 		arsort( $word_freq );
 		$top_words = array_slice( array_keys( $word_freq ), 0, 10 );
 		
-		// Search for posts with similar content
+		// Search for posts with similar content using multiple search terms
+		$search_query = implode( ' ', array_slice( $top_words, 0, 5 ) );
+		
+		// Include both published and draft posts to find connections
+		// even with content that hasn't been published yet
 		$args = array(
 			'post_type'      => 'post',
-			'post_status'    => 'publish',
-			'posts_per_page' => $limit,
+			'post_status'    => array( 'publish', 'draft' ),
+			'posts_per_page' => $limit * 2, // Get more initially to filter better
 			'post__not_in'   => array( $post_id ),
-			's'              => implode( ' ', array_slice( $top_words, 0, 3 ) ),
+			's'              => $search_query,
 			'orderby'        => 'relevance',
 		);
 		
@@ -402,22 +454,43 @@ class Post_Processor {
 		$related_data = array();
 		
 		foreach ( $related_posts as $post ) {
+			// Calculate relevance score based on shared keywords
+			// Limit content length to improve performance
+			$post_content_sample = substr( strip_tags( $post->post_content ), 0, 5000 );
+			$post_words = str_word_count( strtolower( $post_content_sample ), 1 );
+			$post_words = array_diff( $post_words, self::COMMON_WORDS );
+			$shared_words = array_intersect( $top_words, $post_words );
+			$relevance_score = count( $shared_words );
+			
+			// Skip if relevance is too low
+			if ( $relevance_score < 2 ) {
+				continue;
+			}
+			
 			$categories = get_the_category( $post->ID );
 			$category_names = array();
 			if ( ! empty( $categories ) && ! is_wp_error( $categories ) ) {
 				$category_names = wp_list_pluck( $categories, 'name' );
 			}
 			
+			$tags = wp_get_post_tags( $post->ID, array( 'fields' => 'names' ) );
+			
 			$related_data[] = array(
 				'title' => $post->post_title,
 				'url'   => get_permalink( $post->ID ),
-				'excerpt' => wp_trim_words( $post->post_content, 30 ),
-				'tags'  => wp_get_post_tags( $post->ID, array( 'fields' => 'names' ) ),
+				'excerpt' => wp_trim_words( $post->post_content, 50 ),
+				'tags'  => ! empty( $tags ) ? $tags : array(),
 				'categories' => $category_names,
+				'relevance_score' => $relevance_score,
 			);
 		}
 		
-		return $related_data;
+		// Sort by relevance score and limit results
+		usort( $related_data, function( $a, $b ) {
+			return $b['relevance_score'] - $a['relevance_score'];
+		} );
+		
+		return array_slice( $related_data, 0, $limit );
 	}
 
 	/**
@@ -440,25 +513,44 @@ class Post_Processor {
 		
 		// Add related posts context if available
 		if ( ! empty( $related_posts ) ) {
-			$prompt .= "RELATED CONTENT FROM OTHER POSTS (use this to enrich your response):\n";
-			foreach ( $related_posts as $related ) {
-				$prompt .= "- Post: \"{$related['title']}\" (URL: {$related['url']})\n";
-				$prompt .= "  Excerpt: {$related['excerpt']}\n";
+			$prompt .= "RELATED CONTENT FROM OTHER POSTS:\n";
+			$prompt .= "Use this information to enrich your historical context response and create connections between posts.\n";
+			$prompt .= "When you find thematic or geographical connections, REFERENCE these related posts explicitly.\n\n";
+			
+			foreach ( $related_posts as $idx => $related ) {
+				$prompt .= sprintf( "[Related Post %d]\n", $idx + 1 );
+				$prompt .= "- Title: \"{$related['title']}\"\n";
+				$prompt .= "- URL: {$related['url']}\n";
+				$prompt .= "- Excerpt: {$related['excerpt']}\n";
+				
 				if ( ! empty( $related['tags'] ) ) {
-					$prompt .= "  Tags: " . implode( ', ', $related['tags'] ) . "\n";
+					$prompt .= "- Tags: " . implode( ', ', $related['tags'] ) . "\n";
 				}
+				
 				if ( ! empty( $related['categories'] ) ) {
-					$prompt .= "  Categories: " . implode( ', ', $related['categories'] ) . "\n";
+					$prompt .= "- Categories: " . implode( ', ', $related['categories'] ) . "\n";
 				}
+				
+				$prompt .= "\n";
 			}
-			$prompt .= "\n";
+			
+			$prompt .= "NARRATIVE CONNECTIONS:\n";
+			$prompt .= "- Look for thematic connections (similar topics, time periods, themes)\n";
+			$prompt .= "- Look for geographical connections (same region, nearby locations)\n";
+			$prompt .= "- Look for categorical connections (shared categories or tags)\n";
+			$prompt .= "- Create meaningful links that help readers discover related content\n\n";
 		}
 		
 		$prompt .= "For each SPECIFIC location found, provide:\n";
 		$prompt .= "- Historical context (2-3 sentences) with SPECIFIC dates and events\n";
 		$prompt .= "- One interesting, LESSER-KNOWN fact (avoid obvious information)\n";
-		$prompt .= "- Links to related posts when relevant (use the related content URLs provided above)\n";
-		$prompt .= "- Relevant tags and categories from related posts that connect to this narrative\n";
+		
+		if ( ! empty( $related_posts ) ) {
+			$prompt .= "- Links to related posts that have meaningful connections (use the related content URLs provided above)\n";
+			$prompt .= "- Explain WHY each related post is relevant (e.g., 'This connects to [Post Title] which explores...')\n";
+			$prompt .= "- Mention shared themes, categories, or tags that create the connection\n";
+		}
+		
 		$prompt .= "- Focus on substantive historical information, not trivial details\n\n";
 		$prompt .= "Format the response as a WordPress quote block with the following EXACT structure:\n\n";
 		$prompt .= "<!-- wp:quote -->\n";
@@ -467,9 +559,13 @@ class Post_Processor {
 		$prompt .= "  <p><strong>[Location Name]</strong><br>\n";
 		$prompt .= "  [Historical context in 2-3 sentences. Include specific dates and events.]</p>\n";
 		$prompt .= "  <p><em>Did you know?</em> [Interesting lesser-known fact]</p>\n";
+		
 		if ( ! empty( $related_posts ) ) {
-			$prompt .= "  <p><em>Related:</em> [Add links to relevant posts using format: <a href=\"URL\">Post Title</a>. Mention relevant tags/categories.]</p>\n";
+			$prompt .= "  <p><em>Related:</em> [Add links to relevant posts using format: <a href=\"URL\">Post Title</a>. ";
+			$prompt .= "Explain the connection, e.g., 'This connects to <a href=\"URL\">Title</a> which explores similar themes in [category/tag].' ";
+			$prompt .= "Only include posts with clear, meaningful connections.]</p>\n";
 		}
+		
 		$prompt .= "  <!-- Repeat for additional locations -->\n";
 		$prompt .= "</blockquote>\n";
 		$prompt .= "<!-- /wp:quote -->\n\n";
